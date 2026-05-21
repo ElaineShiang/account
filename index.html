@@ -176,6 +176,23 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <div class="card"><div class="ct">💹 財務健康</div><div id="dashInsights"></div></div>
   <div class="card"><div class="ct">📋 本月記錄</div><div id="dashRecent"></div></div>
   <div class="card"><div class="ct">🏦 資產成長</div><div id="dashSavGrowth"></div></div>
+
+  <div class="card">
+    <div class="ct">💾 資料備份 &amp; 同步</div>
+    <div id="syncStatus" style="background:var(--cream);border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12px"></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.7">
+      新增的記錄會自動同步到 Google Sheets。<br>
+      換裝置時點「🔄 立即重新同步」即可取得最新資料。
+    </div>
+    <button class="sbtn" onclick="manualSync()" style="background:var(--sky)">🔄 立即重新同步</button>
+    <button class="sbtn" onclick="firstTimeSync()" style="background:var(--sage)">☁️ 首次上傳歷史資料</button>
+    <div class="dv"></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">離線備份（備用）</div>
+    <button class="sbtn sec" onclick="exportBackup()">⬇ 匯出備份 JSON</button>
+    <button class="sbtn sec" onclick="document.getElementById('importFile').click()">⬆ 匯入備份還原</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(event)">
+    <div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">上次備份：<span id="lastBkTime">未備份</span></div>
+  </div>
 </div>
 
 <!-- 收支 -->
