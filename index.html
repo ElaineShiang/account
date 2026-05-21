@@ -1223,14 +1223,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   // modal close on bg
   ['qModal','eModal','rModal'].forEach(id=>{const el=document.getElementById(id);el?.addEventListener('click',e=>{if(e.target===el)el.classList.remove('on')})});
 
-  // 先用 Bundle 資料快速顯示
-  renderDash(); renderSal(); renderTui(); renderHB(); renderSk(); renderSav();
-  document.getElementById('loadingMsg').textContent = '載入內建資料…';
+  // 先用 Bundle 資料渲染，立刻隱藏載入畫面
+  renderDash(); renderIE(); renderSal(); renderTui(); renderHB(); renderSk(); renderSav();
 
-  // 再從 Google Sheets 載入最新資料
-  // 設定 10 秒超時
-  const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(false), 10000));
-  const ok = await Promise.race([loadFromGS(), timeoutPromise]);
+  // 立刻隱藏載入畫面，不等 GS
+  document.getElementById('loadingScreen').classList.add('hide');
+
+  // 背景連線 GS（不阻塞 UI）
+  const ok = await Promise.race([
+    loadFromGS(),
+    new Promise(resolve => setTimeout(() => resolve(false), 8000))
+  ]);
 
   if(ok) {
     // GS 已有資料 → 重新渲染
@@ -1245,8 +1248,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // 隱藏載入畫面
-  document.getElementById('loadingScreen').classList.add('hide');
 });
 </script>
 </body>
