@@ -1228,7 +1228,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('loadingMsg').textContent = '載入內建資料…';
 
   // 再從 Google Sheets 載入最新資料
-  const ok = await loadFromGS();
+  // 設定 10 秒超時
+  const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(false), 10000));
+  const ok = await Promise.race([loadFromGS(), timeoutPromise]);
 
   if(ok) {
     // GS 已有資料 → 重新渲染
