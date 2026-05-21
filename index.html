@@ -772,7 +772,7 @@ async function loadFromGS() {
     if(!result.ok) throw new Error(result.error);
 
     const d = result.data;
-    if(d.records  && d.records.length)  records  = d.records;
+    if(d.records  && d.records.length)  records  = d.records.sort((a,b)=>b.date.localeCompare(a.date));
     if(d.salary   && d.salary.length)   salaries = d.salary;
     if(d.tuitionN && d.tuitionN.length) tuitionN = d.tuitionN;
     if(d.tuitionD && d.tuitionD.length) tuitionD = d.tuitionD;
