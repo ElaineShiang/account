@@ -195,6 +195,23 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <input class="srch" type="search" id="srch" placeholder="搜尋金額、備註…" oninput="doSearch()">
     <button class="srch-clr" onclick="clearSrch()">清除</button>
   </div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+    <button id="batchBtn" onclick="toggleBatch()" style="padding:5px 14px;border-radius:16px;border:1.5px solid var(--border);background:var(--paper);font-size:12px;color:var(--muted);cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600;transition:all .15s">
+      ☑ 批次編輯
+    </button>
+  </div>
+  <!-- 批次工具列（平時隱藏）-->
+  <div id="batchBar" style="display:none;background:var(--ink);border-radius:11px;padding:10px 13px;margin-bottom:10px;gap:6px;flex-wrap:wrap;align-items:center">
+    <span id="batchCount" style="font-size:12px;color:var(--gl);margin-right:4px">已選 0 筆</span>
+    <button onclick="batchSelectAll()" style="padding:4px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:transparent;color:var(--gl);font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif">全選</button>
+    <button onclick="batchClearAll()" style="padding:4px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:transparent;color:var(--gl);font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif">取消</button>
+    <div style="flex:1"></div>
+    <button onclick="batchAction('date')" style="padding:5px 11px;border-radius:10px;border:none;background:var(--sky);color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">📅 改日期</button>
+    <button onclick="batchAction('cat')" style="padding:5px 11px;border-radius:10px;border:none;background:var(--sage);color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">🏷 改類別</button>
+    <button onclick="batchAction('pay')" style="padding:5px 11px;border-radius:10px;border:none;background:#7a5a9a;color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">💳 改付款</button>
+    <button onclick="batchAction('biz')" style="padding:5px 11px;border-radius:10px;border:none;background:var(--gold);color:var(--ink);font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">💼 出差</button>
+    <button onclick="batchAction('del')" style="padding:5px 11px;border-radius:10px;border:none;background:var(--exp);color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">🗑 刪除</button>
+  </div>
   <div class="chips" id="mf"></div>
   <div class="card">
     <div class="ct fb" style="flex-direction:row;gap:0">
@@ -546,6 +563,65 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   </div>
 </div>
 
+<!-- 批次操作 Modal -->
+<div class="modal-bg" id="batchModal">
+  <div class="modal">
+    <div class="modal-ttl"><span id="batchModalTitle">批次修改</span>
+      <button class="modal-x" onclick="document.getElementById('batchModal').classList.remove('on')">✕</button>
+    </div>
+    <!-- 改日期 -->
+    <div id="batchDateWrap" style="display:none">
+      <div class="fr"><label class="fl">統一改為此日期</label>
+        <input class="fi" type="date" id="batchDate">
+      </div>
+    </div>
+    <!-- 改類別 -->
+    <div id="batchCatWrap" style="display:none">
+      <div class="fr"><label class="fl">統一改為此類別</label>
+        <select class="fs" id="batchCat">
+          <option value="">— 選擇 —</option>
+          <optgroup label="支出"><option>食材/採買</option><option>外食</option><option>交通/加油</option><option>醫療</option><option>保健/美容</option><option>網購/蝦皮</option><option>訂閱/服務</option><option>保險</option><option>孩子費用</option><option>娛樂/出遊</option><option>衣物</option><option>紅包/禮金</option><option>其他支出</option></optgroup>
+          <optgroup label="收入"><option>薪資入帳</option><option>獎金</option><option>配息</option><option>補助款</option><option>代墊回收</option><option>其他收入</option></optgroup>
+        </select>
+      </div>
+    </div>
+    <!-- 改付款 -->
+    <div id="batchPayWrap" style="display:none">
+      <div class="fr"><label class="fl">統一改為此付款方式</label>
+        <select class="fs" id="batchPay">
+          <option value="">— 選擇 —</option>
+          <optgroup label="信用卡／簽帳"><option>信用卡</option><option>玉山Wallet</option><option>玉山Unicard</option><option>中信 Line Pay</option></optgroup>
+          <optgroup label="電子支付"><option>Line Pay</option><option>iPASS MONEY</option><option>全盈+PAY</option><option>icash Pay</option><option>全支付</option><option>台灣行動支付</option></optgroup>
+          <optgroup label="其他"><option>現金</option><option>轉帳</option></optgroup>
+        </select>
+      </div>
+    </div>
+    <!-- 標記出差 -->
+    <div id="batchBizWrap" style="display:none">
+      <div style="background:var(--cream);border-radius:9px;padding:12px 14px;font-size:13px">
+        <div style="font-weight:600;margin-bottom:6px">💼 出差費用標記</div>
+        <div style="display:flex;gap:10px">
+          <button onclick="batchBizSet(true)" style="flex:1;padding:10px;border-radius:9px;border:none;background:var(--sky);color:#fff;font-size:13px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">✅ 標記為出差</button>
+          <button onclick="batchBizSet(false)" style="flex:1;padding:10px;border-radius:9px;border:none;background:var(--cream);color:var(--muted);font-size:13px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600;border:1px solid var(--border)">✕ 取消出差標記</button>
+        </div>
+      </div>
+    </div>
+    <!-- 刪除確認 -->
+    <div id="batchDelWrap" style="display:none">
+      <div style="background:#fdf0ec;border-radius:9px;padding:12px 14px;text-align:center">
+        <div style="font-size:18px;margin-bottom:6px">🗑️</div>
+        <div style="font-size:13px;font-weight:600;color:var(--exp)" id="batchDelMsg"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">此操作無法復原</div>
+      </div>
+    </div>
+    <div style="height:10px"></div>
+    <div id="batchConfirmBtns" style="display:flex;gap:8px">
+      <button class="sbtn sec" onclick="document.getElementById('batchModal').classList.remove('on')">取消</button>
+      <button class="sbtn" id="batchConfirmBtn" onclick="batchConfirm()">確認</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -742,6 +818,23 @@ async function retryPending() {
 }
 
 // ══ UTILS ══
+// 修正時區問題：把 ISO 格式日期統一轉成台灣本地日期 YYYY-MM-DD
+function fixDate(dateStr) {
+  if(!dateStr) return dateStr;
+  const s = String(dateStr);
+  // 已經是 YYYY-MM-DD 格式就直接回傳
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // ISO 格式 "2026-05-25T16:00:00.000Z" → 轉台灣時間
+  const d = new Date(s);
+  if(isNaN(d.getTime())) return s;
+  // 用台灣時區格式化
+  const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+  return tw.toISOString().slice(0, 10);
+}
+function fixRecordDates(arr) {
+  return arr.map(r => ({...r, date: fixDate(r.date)}));
+}
+
 function togPayOther(wrapId, val) {
   const el = document.getElementById(wrapId);
   if(el) el.style.display = val === '其他（請填備註）' ? 'block' : 'none';
@@ -758,7 +851,7 @@ function getPayVal(selectId, otherId) {
 const fmt  = n => n ? '$'+Math.round(n).toLocaleString('zh-TW') : '$0';
 const fmtK = n => { if(!n) return '$0'; const a=Math.abs(Math.round(n)); return (n<0?'-':'')+'$'+(a>=10000?Math.round(a/1000)+'K':a.toLocaleString('zh-TW')); };
 const pct  = n => Math.round(n*10)/10+'%';
-const today= () => new Date().toISOString().slice(0,10);
+const today= () => { const tw=new Date(Date.now()+8*3600000); return tw.toISOString().slice(0,10); };
 const sum  = (rs,t) => rs.filter(r=>r.type===t).reduce((a,b)=>a+b.amount,0);
 function toast(m,d=2200) { const e=document.getElementById('toast'); e.textContent=m; e.classList.add('on'); setTimeout(()=>e.classList.remove('on'),d); }
 function setSyncStatus(state, msg) {
@@ -793,7 +886,7 @@ async function loadFromGS() {
     if(!result.ok) throw new Error(result.error);
 
     const d = result.data;
-    if(d.records  && d.records.length)  records  = d.records.sort((a,b)=>b.date.localeCompare(a.date));
+    if(d.records  && d.records.length)  records  = fixRecordDates(d.records).sort((a,b)=>b.date.localeCompare(a.date));
     if(d.salary   && d.salary.length)   salaries = d.salary;
     if(d.tuitionN && d.tuitionN.length) tuitionN = d.tuitionN;
     if(d.tuitionD && d.tuitionD.length) tuitionD = d.tuitionD;
@@ -1010,12 +1103,13 @@ function renderList() {
 
     return `
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;border-bottom:2px solid var(--ink);margin-top:4px">
+        ${batchMode?`<input type="checkbox" class="batch-day-cb" data-date="${date}" onclick="batchToggleDay('${date}',this)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--sky);flex-shrink:0">`:''}
         <span style="font-size:12px;font-weight:700;color:var(--ink)">${dateLabel}</span>
         <span style="font-size:11px;margin-left:4px">${summaryParts.join(' ・ ')}</span>
       </div>
       ${g.rows.map(r=>`
-      <div class="ri" onclick="openE(${r.id})">
-        <div class="rdot ${r.type}"></div>
+      <div class="ri" onclick="${batchMode?`batchToggle(${r.id},this)`:`openE(${r.id})`}" style="${batchMode?'cursor:pointer;':''}${batchSelected.has(r.id)?'background:#eef5ff;margin:0 -4px;padding-left:4px;padding-right:4px;border-radius:6px;':''}">
+        ${batchMode?`<input type="checkbox" class="batch-cb" data-id="${r.id}" ${batchSelected.has(r.id)?'checked':''} onclick="event.stopPropagation();batchToggle(${r.id},this.closest('.ri'))" style="width:16px;height:16px;cursor:pointer;accent-color:var(--sky);flex-shrink:0;margin-top:0">`:'<div class="rdot '+r.type+'"></div>'}
         <div class="rb">
           <div class="rn">
             ${r.isBiz?'<span style="background:var(--sky);color:#fff;font-size:9px;padding:1px 5px;border-radius:5px;margin-right:4px;vertical-align:middle">💼出差</span>':''}
@@ -1024,7 +1118,7 @@ function renderList() {
           <div class="rm">${r.cat?' '+r.cat:''}${r.payment?' ・'+r.payment:''}</div>
         </div>
         <div class="ra ${r.type}">${r.type==='expense'?'-':'+'}${fmt(r.amount)}</div>
-        <button class="rdel" onclick="event.stopPropagation();delR(${r.id})">✕</button>
+        ${batchMode?'':`<button class="rdel" onclick="event.stopPropagation();delR(${r.id})">✕</button>`}
       </div>`).join('')}`;
   }).join('');
 }
