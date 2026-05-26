@@ -443,7 +443,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <div class="fr2 fr">
       <div><label class="fl">日期</label><input class="fi" type="date" id="qDate"></div>
       <div><label class="fl">類別</label>
-        <select class="fs" id="qCat">
+        <select class="fs" id="qCat" onchange="onQCatChange(this.value)">
           <option value="">—</option>
           <optgroup label="支出"><option>食材/採買</option><option>外食</option><option>交通/加油</option><option>醫療</option><option>保健/美容</option><option>網購/蝦皮</option><option>訂閱/服務</option><option>保險</option><option>孩子費用</option><option>娛樂/出遊</option><option>衣物</option><option>紅包/禮金</option><option>其他支出</option></optgroup>
           <optgroup label="收入"><option>薪資入帳</option><option>獎金</option><option>配息</option><option>補助款</option><option>代墊回收</option><option>其他收入</option></optgroup>
@@ -560,6 +560,89 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     </div>
     <div id="rPreview" style="margin-bottom:10px"></div>
     <button class="sbtn" onclick="dlReport()">⬇ 下載 HTML 報告</button>
+  </div>
+</div>
+
+<!-- 學費快填 Modal -->
+<div class="modal-bg" id="tuiQuickModal">
+  <div class="modal">
+    <div class="modal-ttl">🏫 學費快填
+      <button class="modal-x" onclick="closeTuiQuick()">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+      填完後自動同步到孩子頁的學費記錄
+    </div>
+    <!-- 孩子選擇 -->
+    <div class="fr">
+      <label class="fl">孩子</label>
+      <div style="display:flex;gap:8px">
+        <button id="tqNora" onclick="setTqChild('nora')"
+          style="flex:1;padding:9px;border-radius:9px;border:2px solid var(--rust);background:var(--rust);color:#fff;font-family:'Noto Serif TC',serif;font-size:14px;cursor:pointer;font-weight:600">
+          🌸 Nora
+        </button>
+        <button id="tqDennis" onclick="setTqChild('dennis')"
+          style="flex:1;padding:9px;border-radius:9px;border:2px solid var(--border);background:var(--paper);color:var(--muted);font-family:'Noto Serif TC',serif;font-size:14px;cursor:pointer;font-weight:600">
+          🌿 Dennis
+        </button>
+      </div>
+    </div>
+    <!-- 學校名稱 -->
+    <div class="fr">
+      <label class="fl">學校／機構名稱</label>
+      <input class="fi" type="text" id="tqSch" placeholder="德育幼兒園" list="tqSchList">
+      <datalist id="tqSchList">
+        <option value="德育幼兒園">
+        <option value="北青公托">
+        <option value="虹橋托嬰中心">
+        <option value="德育安親班">
+      </datalist>
+    </div>
+    <!-- 費用類別 -->
+    <div class="fr">
+      <label class="fl">費用類別</label>
+      <select class="fs" id="tqCat">
+        <option value="kinder">🌱 幼兒園</option>
+        <option value="daycare">🏡 公托</option>
+        <option value="nursery">👶 托嬰中心</option>
+        <option value="primary">📚 國小</option>
+        <option value="aftercare">🌇 安親班</option>
+        <option value="cram">📖 補習班</option>
+        <option value="talent">🎨 才藝班</option>
+        <option value="other">💡 其他</option>
+      </select>
+    </div>
+    <!-- 補助款 -->
+    <div class="fr2 fr">
+      <div>
+        <label class="fl">補助款</label>
+        <input class="fi" type="number" id="tqSub" placeholder="0" inputmode="numeric" oninput="updateTqActual()">
+      </div>
+      <div>
+        <label class="fl">付款方式</label>
+        <select class="fs" id="tqPay">
+          <option>台灣行動支付</option>
+          <option>現金</option>
+          <option>玉山銀行</option>
+          <option>中信 Line Pay</option>
+        </select>
+      </div>
+    </div>
+    <!-- 備註 -->
+    <div class="fr">
+      <label class="fl">備註（選填）</label>
+      <input class="fi" type="text" id="tqNote" placeholder="延拖費、材料費等">
+    </div>
+    <!-- 實付金額顯示 -->
+    <div style="background:var(--cream);border-radius:9px;padding:9px 13px;margin-bottom:12px">
+      <div class="fb">
+        <span style="font-size:11px;color:var(--muted)">實付金額（已從收支扣補助）</span>
+        <span id="tqActual" style="font-family:'DM Mono';font-size:16px;color:var(--exp);font-weight:700">—</span>
+      </div>
+    </div>
+    <div class="fr2">
+      <button class="sbtn sec" onclick="closeTuiQuick()">略過，只記收支</button>
+      <button class="sbtn" onclick="submitTuiQuick()">同步學費記錄</button>
+    </div>
   </div>
 </div>
 
@@ -1072,16 +1155,23 @@ function buildMF() {
 }
 function filtM(m){ cM=m; srchQ=''; document.getElementById('srch').value=''; buildMF(); renderList(); }
 function renderList() {
-  let list = cM==='all' ? records : records.filter(r=>r.date.startsWith(cM));
+  let list = (cM==='all' ? records : records.filter(r=>r.date.startsWith(cM)))
+    .sort((a,b)=>b.date.localeCompare(a.date));
   if(srchQ) list = list.filter(matchR);
+
   const tE=sum(list,'expense'), tI=sum(list,'income');
   document.getElementById('sumExp').textContent=fmt(tE);
   document.getElementById('sumInc').textContent=fmt(tI);
   document.getElementById('sumBal').textContent=fmt(tI-tE);
   document.getElementById('rCnt').textContent=(srchQ?'搜尋：':'')+list.length+' 筆';
-  const el=document.getElementById('rList');
-  if(!list.length){ el.innerHTML='<div class="empty">'+(srchQ?'找不到符合記錄':'本期無記錄')+'</div>'; return; }
-  // 按日期分組，加每日小計
+
+  const el = document.getElementById('rList');
+  if(!list.length){
+    el.innerHTML='<div class="empty">'+(srchQ?'找不到符合記錄':'本期無記錄')+'</div>';
+    return;
+  }
+
+  // 按日期分組
   const byDate = {};
   list.forEach(r => {
     const d = r.date.slice(0,10);
@@ -1091,37 +1181,108 @@ function renderList() {
     byDate[d].rows.push(r);
   });
 
-  el.innerHTML = Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).map(date => {
+  const frag = document.createDocumentFragment();
+
+  Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(date => {
     const g = byDate[date];
     const [y,m,d] = date.split('-');
-    const dateLabel = `${y}/${m}/${d}`;
-    const summaryParts = [];
-    if(g.exp) summaryParts.push(`<span style="color:var(--exp)">支出 ${fmt(g.exp)}</span>`);
-    if(g.inc) summaryParts.push(`<span style="color:var(--inc)">收入 ${fmt(g.inc)}</span>`);
-    const bal = g.inc - g.exp;
-    if(g.exp && g.inc) summaryParts.push(`<span style="color:var(--bal)">結餘 ${fmt(bal)}</span>`);
 
-    return `
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;border-bottom:2px solid var(--ink);margin-top:4px">
-        ${batchMode?`<input type="checkbox" class="batch-day-cb" data-date="${date}" onclick="batchToggleDay('${date}',this)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--sky);flex-shrink:0">`:''}
-        <span style="font-size:12px;font-weight:700;color:var(--ink)">${dateLabel}</span>
-        <span style="font-size:11px;margin-left:4px">${summaryParts.join(' ・ ')}</span>
-      </div>
-      ${g.rows.map(r=>`
-      <div class="ri" onclick="${batchMode?`batchToggle(${r.id},this)`:`openE(${r.id})`}" style="${batchMode?'cursor:pointer;':''}${batchSelected.has(r.id)?'background:#eef5ff;margin:0 -4px;padding-left:4px;padding-right:4px;border-radius:6px;':''}">
-        ${batchMode?`<input type="checkbox" class="batch-cb" data-id="${r.id}" ${batchSelected.has(r.id)?'checked':''} onclick="event.stopPropagation();batchToggle(${r.id},this.closest('.ri'))" style="width:16px;height:16px;cursor:pointer;accent-color:var(--sky);flex-shrink:0;margin-top:0">`:'<div class="rdot '+r.type+'"></div>'}
-        <div class="rb">
-          <div class="rn">
-            ${r.isBiz?'<span style="background:var(--sky);color:#fff;font-size:9px;padding:1px 5px;border-radius:5px;margin-right:4px;vertical-align:middle">💼出差</span>':''}
-            ${r.note||r.cat||'—'}
-          </div>
-          <div class="rm">${r.cat?' '+r.cat:''}${r.payment?' ・'+r.payment:''}</div>
-        </div>
-        <div class="ra ${r.type}">${r.type==='expense'?'-':'+'}${fmt(r.amount)}</div>
-        ${batchMode?'':`<button class="rdel" onclick="event.stopPropagation();delR(${r.id})">✕</button>`}
-      </div>`).join('')}`;
-  }).join('');
+    // 日期標題列
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 0 4px;border-bottom:2px solid var(--ink);margin-top:4px';
+
+    if(batchMode) {
+      const dayCb = document.createElement('input');
+      dayCb.type = 'checkbox';
+      dayCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--sky);flex-shrink:0';
+      dayCb.addEventListener('click', function(){ batchToggleDay(date, this); });
+      // 如果該日全選，勾選
+      dayCb.checked = g.rows.every(r => batchSelected.has(r.id));
+      hdr.appendChild(dayCb);
+    }
+
+    const dateSpan = document.createElement('span');
+    dateSpan.style.cssText = 'font-size:12px;font-weight:700;color:var(--ink)';
+    dateSpan.textContent = y+'/'+m+'/'+d;
+    hdr.appendChild(dateSpan);
+
+    const parts = [];
+    if(g.exp) parts.push('<span style="color:var(--exp)">支出 '+fmt(g.exp)+'</span>');
+    if(g.inc) parts.push('<span style="color:var(--inc)">收入 '+fmt(g.inc)+'</span>');
+    if(g.exp && g.inc) parts.push('<span style="color:var(--bal)">結餘 '+fmt(g.inc-g.exp)+'</span>');
+    const sumSpan = document.createElement('span');
+    sumSpan.style.cssText = 'font-size:11px;margin-left:4px';
+    sumSpan.innerHTML = parts.join(' ・ ');
+    hdr.appendChild(sumSpan);
+    frag.appendChild(hdr);
+
+    // 各筆記錄
+    g.rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'ri';
+      if(batchSelected.has(r.id)) {
+        row.style.cssText = 'background:#eef5ff;margin:0 -4px;padding-left:4px;padding-right:4px;border-radius:6px;cursor:pointer';
+      } else if(batchMode) {
+        row.style.cursor = 'pointer';
+      }
+
+      if(batchMode) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'batch-cb';
+        cb.dataset.id = r.id;
+        cb.checked = batchSelected.has(r.id);
+        cb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--sky);flex-shrink:0;margin-top:0';
+        cb.addEventListener('click', function(e){ e.stopPropagation(); batchToggle(r.id, row); });
+        row.appendChild(cb);
+        row.addEventListener('click', function(){ batchToggle(r.id, row); });
+      } else {
+        const dot = document.createElement('div');
+        dot.className = 'rdot '+r.type;
+        row.appendChild(dot);
+        row.addEventListener('click', function(){ openE(r.id); });
+      }
+
+      const rb = document.createElement('div');
+      rb.className = 'rb';
+      const rn = document.createElement('div');
+      rn.className = 'rn';
+      if(r.isBiz) {
+        const badge = document.createElement('span');
+        badge.style.cssText = 'background:var(--sky);color:#fff;font-size:9px;padding:1px 5px;border-radius:5px;margin-right:4px;vertical-align:middle';
+        badge.textContent = '💼出差';
+        rn.appendChild(badge);
+      }
+      rn.appendChild(document.createTextNode(r.note||r.cat||'—'));
+      rb.appendChild(rn);
+
+      const rm = document.createElement('div');
+      rm.className = 'rm';
+      rm.textContent = (r.cat?' '+r.cat:'')+(r.payment?' ・'+r.payment:'');
+      rb.appendChild(rm);
+      row.appendChild(rb);
+
+      const ra = document.createElement('div');
+      ra.className = 'ra '+r.type;
+      ra.textContent = (r.type==='expense'?'-':'+')+fmt(r.amount);
+      row.appendChild(ra);
+
+      if(!batchMode) {
+        const del = document.createElement('button');
+        del.className = 'rdel';
+        del.textContent = '✕';
+        del.addEventListener('click', function(e){ e.stopPropagation(); delR(r.id); });
+        row.appendChild(del);
+      }
+
+      frag.appendChild(row);
+    });
+  });
+
+  el.innerHTML = '';
+  el.appendChild(frag);
 }
+
 function renderIE(){ buildMF(); renderList(); }
 async function delR(id) {
   if(!confirm('確認刪除？')) return;
@@ -1297,8 +1458,28 @@ async function addSal(){
   if(ov)items.push({label:on||'其他',amount:ov});
   const s={id:Date.now(),year:+document.getElementById('salYr').value,month:+document.getElementById('salMo').value,total,items};
   salaries.unshift(s);
-  renderSal();toast('✓ 薪資已儲存');
+  renderSal(); toast('✓ 薪資已儲存');
   await pushToGS('salary', {...s, items_json: JSON.stringify(s.items)});
+
+  // 自動同步一筆薪資入帳到收支記錄
+  const salMonth = String(s.month).padStart(2,'0');
+  // 發薪日由使用者在收支記錄自行確認（預設當月，日期空白）
+  const salDate = s.year + '-' + salMonth + '-06';  // 預設6號，可於收支頁點記錄修改
+  const salRec = {
+    id: Date.now()+9e6+1,
+    date: salDate,
+    type: 'income',
+    amount: s.total,
+    cat: '薪資入帳',
+    note: s.year + '年' + s.month + '月薪資',
+    payment: '轉帳',
+    isBiz: false,
+    autoFrom: 'salary'
+  };
+  records.unshift(salRec);
+  setLS('rn', records.filter(x=>x.id>9e6));
+  await pushToGS('records', salRec);
+  toast('✓ 薪資已儲存，並同步至收支（' + salDate + '）');
 }
 function renderSalStruct(){
   const ss=SAL_STRUCTS;
@@ -1354,8 +1535,29 @@ async function addTui(){
   if(cC==='nora'){tuitionN.unshift(it)}else{tuitionD.unshift(it)}
   ['tReg','tIns','tM','tE','tSess','tSub','tNote'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});
   document.getElementById('tCalc').textContent='$0';
-  renderTui();toast('✓ 已記錄');
+  renderTui(); toast('✓ 已記錄');
   await pushToGS(cC==='nora'?'tuitionN':'tuitionD', it);
+
+  // 自動同步一筆到收支記錄
+  if(it.actual > 0) {
+    const catName = {nursery:'托嬰中心',daycare:'公托',kinder:'幼兒園',primary:'國小',aftercare:'安親班',cram:'補習班',talent:'才藝班',other:'其他'}[cTC]||'孩子費用';
+    const childName = cC==='nora'?'Nora':'Dennis';
+    const rec = {
+      id: Date.now()+9e6,
+      date: it.date,
+      type: 'expense',
+      amount: it.actual,
+      cat: '孩子費用',
+      note: it.school + ' ' + catName + '（' + childName + '）',
+      payment: it.payment||'',
+      isBiz: false,
+      autoFrom: 'tuition'  // 標記來源，避免重複計算
+    };
+    records.unshift(rec);
+    setLS('rn', records.filter(x=>x.id>9e6));
+    await pushToGS('records', rec);
+    toast('✓ 學費已記錄，並同步至收支');
+  }
 }
 function renderTui(){
   const list=cC==='nora'?tuitionN:tuitionD;
@@ -1392,8 +1594,8 @@ async function addHB(){
   if(!a||!g){toast('⚠️ 請填金額和贈予者');return}
   const it={id:Date.now(),year:+document.getElementById('hbYr').value,amount:a,giver:g,note:''};
   if(cHB==='nora'){hongbaoN.push(it)}else{hongbaoD.push(it)}
-  document.getElementById('hbWho').value='';document.getElementById('hbAmt').value='';
-  renderHB();toast('🧧 已記錄');
+  document.getElementById('hbWho').value=''; document.getElementById('hbAmt').value='';
+  renderHB(); toast('🧧 已記錄');
   await pushToGS(cHB==='nora'?'hbN':'hbD', it);
 }
 function renderHB(){
@@ -1450,6 +1652,130 @@ function renderSk(){
     stocks.map(s=>`<div class="skr"><div><span class="scode">${s.code}</span><div style="font-size:12px;margin-top:1px">${s.name}</div><div style="font-size:10px;color:var(--muted);font-family:'DM Mono'">${s.date}</div></div><div style="text-align:right">${s.type==='dividend'?`<div style="font-size:12px;color:var(--inc)">+配息 ${fmt(s.dividend)}</div>`:`<div style="font-family:'DM Mono';font-size:11px">${s.type==='buy'?'買':'賣'} @${s.price}x${s.shares}</div><div style="font-family:'DM Mono';font-size:11px;color:var(--muted)">${fmt(s.total)}</div>`}</div></div>`).join('');
 }
 
+
+// ══ 學費快填（收支→學費自動同步）══
+let tqChild = 'nora', tqAmount = 0, tqDate = '';
+function onQCatChange(val){if(val==='孩子費用')setTimeout(()=>openTuiQuick(),100)}
+function openTuiQuick(){
+  tqAmount=parseFloat(document.getElementById('qAmt')?.value)||0;
+  tqDate=document.getElementById('qDate')?.value||today();
+  tqChild='nora'; setTqChild('nora');
+  ['tqSch','tqSub','tqNote'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  updateTqActual();
+  document.getElementById('tuiQuickModal').classList.add('on');
+}
+function closeTuiQuick(){document.getElementById('tuiQuickModal').classList.remove('on')}
+function setTqChild(c){
+  tqChild=c;
+  const nb=document.getElementById('tqNora'),db=document.getElementById('tqDennis');
+  const on='flex:1;padding:9px;border-radius:9px;font-family:inherit;font-size:14px;cursor:pointer;font-weight:600;border:2px solid ';
+  nb.style.cssText=on+(c==='nora'?'var(--rust);background:var(--rust);color:#fff':'var(--border);background:var(--paper);color:var(--muted)');
+  db.style.cssText=on+(c==='dennis'?'var(--sage);background:var(--sage);color:#fff':'var(--border);background:var(--paper);color:var(--muted)');
+}
+function updateTqActual(){
+  const sub=parseFloat(document.getElementById('tqSub')?.value)||0;
+  const el=document.getElementById('tqActual');
+  if(el) el.textContent=fmt(Math.max(0,tqAmount-sub));
+}
+async function submitTuiQuick(){
+  const sn=(document.getElementById('tqSch')?.value||'').trim();
+  if(!sn){toast('請填學校名稱');return}
+  const sub=parseFloat(document.getElementById('tqSub')?.value)||0;
+  const catVal=document.getElementById('tqCat')?.value||'kinder';
+  const pay=document.getElementById('tqPay')?.value||'';
+  const note=(document.getElementById('tqNote')?.value||'').trim();
+  const actual=Math.max(0,tqAmount-sub);
+  const it={id:Date.now()+9e6,date:tqDate,child:tqChild,school:sn,category:catVal,
+    reg_fee:0,ins_fee:0,monthly:tqAmount,extra:0,session_fee:0,
+    subsidy:sub,total:tqAmount,actual,payment:pay,note,autoFrom:'records'};
+  if(tqChild==='nora'){tuitionN.unshift(it);setLS('tn',tuitionN.filter(x=>x.id>9e6));await pushToGS('tuitionN',it)}
+  else{tuitionD.unshift(it);setLS('td',tuitionD.filter(x=>x.id>9e6));await pushToGS('tuitionD',it)}
+  closeTuiQuick(); toast('學費已同步到孩子頁！');
+}
+
+// ══ 批次編輯 ══
+let batchMode=false, batchSelected=new Set(), batchCurrentAction='';
+function toggleBatch(){
+  batchMode=!batchMode; batchSelected.clear();
+  const btn=document.getElementById('batchBtn'),bar=document.getElementById('batchBar');
+  if(batchMode){btn.style.background='var(--ink)';btn.style.color='var(--gl)';btn.style.borderColor='var(--ink)';btn.textContent='✕ 結束批次';bar.style.display='flex';}
+  else{btn.style.background='var(--paper)';btn.style.color='var(--muted)';btn.style.borderColor='var(--border)';btn.textContent='☑ 批次編輯';bar.style.display='none';}
+  renderList();
+}
+function batchToggle(id,el){
+  if(batchSelected.has(id)){batchSelected.delete(id);el.style.background='';el.style.margin='';el.style.paddingLeft='';el.style.paddingRight='';el.style.borderRadius='';}
+  else{batchSelected.add(id);el.style.cssText+=';background:#eef5ff;margin:0 -4px;padding-left:4px;padding-right:4px;border-radius:6px';}
+  const cb=el.querySelector('.batch-cb');if(cb)cb.checked=batchSelected.has(id);
+  updateBatchCount();
+}
+function batchToggleDay(date,cb){
+  const dayRows=records.filter(r=>r.date===date);
+  const allSel=dayRows.every(r=>batchSelected.has(r.id));
+  dayRows.forEach(r=>{if(allSel)batchSelected.delete(r.id);else batchSelected.add(r.id);});
+  renderList(); updateBatchCount();
+}
+function updateBatchCount(){document.getElementById('batchCount').textContent='已選 '+batchSelected.size+' 筆'}
+function batchSelectAll(){
+  let list=cM==='all'?records:records.filter(r=>r.date.startsWith(cM));
+  if(srchQ)list=list.filter(matchR);
+  list.forEach(r=>batchSelected.add(r.id));
+  renderList(); updateBatchCount();
+}
+function batchClearAll(){batchSelected.clear();renderList();updateBatchCount();}
+function batchAction(action){
+  if(batchSelected.size===0){toast('⚠️ 請先勾選記錄');return}
+  batchCurrentAction=action;
+  const cnt=batchSelected.size;
+  ['batchDateWrap','batchCatWrap','batchPayWrap','batchBizWrap','batchDelWrap'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('batchConfirmBtns').style.display='flex';
+  const titles={date:'📅 批次改日期',cat:'🏷 批次改類別',pay:'💳 批次改付款方式',biz:'💼 批次標記出差',del:'🗑️ 批次刪除'};
+  document.getElementById('batchModalTitle').textContent=titles[action]+'（'+cnt+' 筆）';
+  if(action==='date'){document.getElementById('batchDateWrap').style.display='block';document.getElementById('batchDate').value=today();}
+  else if(action==='cat'){document.getElementById('batchCatWrap').style.display='block';}
+  else if(action==='pay'){document.getElementById('batchPayWrap').style.display='block';}
+  else if(action==='biz'){document.getElementById('batchBizWrap').style.display='block';document.getElementById('batchConfirmBtns').style.display='none';}
+  else if(action==='del'){document.getElementById('batchDelWrap').style.display='block';document.getElementById('batchDelMsg').textContent='確定要刪除這 '+cnt+' 筆記錄嗎？';}
+  document.getElementById('batchModal').classList.add('on');
+}
+function batchBizSet(val){
+  batchSelected.forEach(id=>{
+    const idx=records.findIndex(r=>r.id===id);
+    if(idx>=0){records[idx].isBiz=val;if(id>9e6)setLS('rn',records.filter(x=>x.id>9e6));else{const e=getLS('rn_e',{});e[id]={...records[idx]};setLS('rn_e',e);}setSyncUI('syncing','同步中…');updateCloud('records',id,{isBiz:val});}
+  });
+  document.getElementById('batchModal').classList.remove('on');
+  toast((val?'✅ 已標記':'✅ 已取消')+' '+batchSelected.size+' 筆出差');
+  batchSelected.clear(); renderList(); updateBatchCount();
+}
+async function batchConfirm(){
+  if(batchSelected.size===0)return;
+  const action=batchCurrentAction; const ids=[...batchSelected];
+  if(action==='del'){
+    for(const id of ids){
+      records=records.filter(r=>r.id!==id);
+      if(id>9e6)setLS('rn',records.filter(x=>x.id>9e6));
+      else{const d=getLS('rn_d',[]);if(!d.includes(id)){d.push(id);setLS('rn_d',d);}}
+      await deleteInGS('records',id);
+    }
+    toast('🗑️ 已刪除 '+ids.length+' 筆記錄');
+  } else if(action==='date'){
+    const newDate=document.getElementById('batchDate').value;
+    if(!newDate){toast('請選擇日期');return}
+    for(const id of ids){const idx=records.findIndex(r=>r.id===id);if(idx>=0){records[idx].date=newDate;if(id>9e6)setLS('rn',records.filter(x=>x.id>9e6));else{const e=getLS('rn_e',{});e[id]={...records[idx]};setLS('rn_e',e);}await updateInGS('records',id,{date:newDate});}}
+    toast('✅ 已將 '+ids.length+' 筆改為 '+newDate);
+  } else if(action==='cat'){
+    const newCat=document.getElementById('batchCat').value;
+    if(!newCat){toast('請選擇類別');return}
+    for(const id of ids){const idx=records.findIndex(r=>r.id===id);if(idx>=0){records[idx].cat=newCat;if(id>9e6)setLS('rn',records.filter(x=>x.id>9e6));else{const e=getLS('rn_e',{});e[id]={...records[idx]};setLS('rn_e',e);}await updateInGS('records',id,{cat:newCat});}}
+    toast('✅ 已將 '+ids.length+' 筆類別改為「'+newCat+'」');
+  } else if(action==='pay'){
+    const newPay=document.getElementById('batchPay').value;
+    if(!newPay){toast('請選擇付款方式');return}
+    for(const id of ids){const idx=records.findIndex(r=>r.id===id);if(idx>=0){records[idx].payment=newPay;if(id>9e6)setLS('rn',records.filter(x=>x.id>9e6));else{const e=getLS('rn_e',{});e[id]={...records[idx]};setLS('rn_e',e);}await updateInGS('records',id,{payment:newPay});}}
+    toast('✅ 已將 '+ids.length+' 筆付款改為「'+newPay+'」');
+  }
+  document.getElementById('batchModal').classList.remove('on');
+  batchSelected.clear(); renderList(); updateBatchCount();
+}
 // ══ INIT ══
 async function manualSync() {
   setSyncUI('syncing','同步中…');
