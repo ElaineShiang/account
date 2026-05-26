@@ -210,6 +210,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <button onclick="batchAction('cat')" style="padding:5px 11px;border-radius:10px;border:none;background:var(--sage);color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">🏷 改類別</button>
     <button onclick="batchAction('pay')" style="padding:5px 11px;border-radius:10px;border:none;background:#7a5a9a;color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">💳 改付款</button>
     <button onclick="batchAction('biz')" style="padding:5px 11px;border-radius:10px;border:none;background:var(--gold);color:var(--ink);font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">💼 出差</button>
+    <button onclick="batchAction('tui')" style="padding:5px 11px;border-radius:10px;border:none;background:#5a4a8a;color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">📚 同步學費</button>
+    <button onclick="batchAction('sal')" style="padding:5px 11px;border-radius:10px;border:none;background:#3a6a5a;color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">📋 同步薪資</button>
     <button onclick="batchAction('del')" style="padding:5px 11px;border-radius:10px;border:none;background:var(--exp);color:#fff;font-size:11px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">🗑 刪除</button>
   </div>
   <div class="chips" id="mf"></div>
@@ -586,16 +588,22 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         </button>
       </div>
     </div>
-    <!-- 學校名稱 -->
-    <div class="fr">
-      <label class="fl">學校／機構名稱</label>
-      <input class="fi" type="text" id="tqSch" placeholder="德育幼兒園" list="tqSchList">
-      <datalist id="tqSchList">
-        <option value="德育幼兒園">
-        <option value="北青公托">
-        <option value="虹橋托嬰中心">
-        <option value="德育安親班">
-      </datalist>
+    <!-- 金額 + 學校名稱 -->
+    <div class="fr2 fr">
+      <div>
+        <label class="fl">費用金額 *</label>
+        <input class="fi" type="number" id="tqAmt" placeholder="0" inputmode="numeric" oninput="tqAmount=parseFloat(this.value)||0;updateTqActual()">
+      </div>
+      <div>
+        <label class="fl">學校／機構名稱 *</label>
+        <input class="fi" type="text" id="tqSch" placeholder="德育幼兒園" list="tqSchList">
+        <datalist id="tqSchList">
+          <option value="德育幼兒園">
+          <option value="北青公托">
+          <option value="虹橋托嬰中心">
+          <option value="德育安親班">
+        </datalist>
+      </div>
     </div>
     <!-- 費用類別 -->
     <div class="fr">
@@ -689,6 +697,96 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         </div>
       </div>
     </div>
+    <!-- 同步學費 -->
+    <div id="batchTuiWrap" style="display:none">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        將勾選的收支記錄，批次建立為孩子頁的學費記錄
+      </div>
+      <div class="fr">
+        <label class="fl">孩子</label>
+        <div style="display:flex;gap:8px">
+          <button id="btqNora" onclick="setBtqChild('nora')"
+            style="flex:1;padding:9px;border-radius:9px;border:2px solid var(--rust);background:var(--rust);color:#fff;font-family:'Noto Serif TC',serif;font-size:13px;cursor:pointer;font-weight:600">
+            🌸 Nora
+          </button>
+          <button id="btqDennis" onclick="setBtqChild('dennis')"
+            style="flex:1;padding:9px;border-radius:9px;border:2px solid var(--border);background:var(--paper);color:var(--muted);font-family:'Noto Serif TC',serif;font-size:13px;cursor:pointer;font-weight:600">
+            🌿 Dennis
+          </button>
+        </div>
+      </div>
+      <div class="fr">
+        <label class="fl">學校／機構名稱</label>
+        <input class="fi" type="text" id="btqSch" placeholder="德育幼兒園" list="btqSchList">
+        <datalist id="btqSchList">
+          <option value="德育幼兒園">
+          <option value="北青公托">
+          <option value="虹橋托嬰中心">
+          <option value="德育安親班">
+        </datalist>
+      </div>
+      <div class="fr">
+        <label class="fl">費用類別</label>
+        <select class="fs" id="btqCat">
+          <option value="kinder">🌱 幼兒園</option>
+          <option value="daycare">🏡 公托</option>
+          <option value="nursery">👶 托嬰中心</option>
+          <option value="primary">📚 國小</option>
+          <option value="aftercare">🌇 安親班</option>
+          <option value="cram">📖 補習班</option>
+          <option value="talent">🎨 才藝班</option>
+          <option value="other">💡 其他</option>
+        </select>
+      </div>
+      <div class="fr2 fr">
+        <div>
+          <label class="fl">統一補助款</label>
+          <input class="fi" type="number" id="btqSub" placeholder="0" inputmode="numeric">
+        </div>
+        <div>
+          <label class="fl">付款方式</label>
+          <select class="fs" id="btqPay">
+            <option>台灣行動支付</option>
+            <option>現金</option>
+            <option>玉山銀行</option>
+            <option>中信 Line Pay</option>
+          </select>
+        </div>
+      </div>
+      <div style="background:var(--cream);border-radius:9px;padding:9px 13px;font-size:12px;color:var(--muted)" id="btqPreview">
+        預覽：將建立 0 筆學費記錄
+      </div>
+    </div>
+
+    <!-- 同步薪資 -->
+    <div id="batchSalWrap" style="display:none">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.7">
+        將勾選的收入記錄，建立為薪資頁的薪資記錄。<br>
+        <span style="color:var(--exp)">⚠ 建議只選「薪資入帳」類別的記錄。</span>
+      </div>
+      <div class="fr2 fr">
+        <div>
+          <label class="fl">年</label>
+          <select class="fs" id="bsalYr"></select>
+        </div>
+        <div>
+          <label class="fl">月</label>
+          <select class="fs" id="bsalMo">
+            <option value="1">1月</option><option value="2">2月</option>
+            <option value="3">3月</option><option value="4">4月</option>
+            <option value="5">5月</option><option value="6">6月</option>
+            <option value="7">7月</option><option value="8">8月</option>
+            <option value="9">9月</option><option value="10">10月</option>
+            <option value="11">11月</option><option value="12">12月</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">薪資項目明細（各筆記錄會拆成個別項目）</div>
+      <div style="background:var(--cream);border-radius:9px;padding:10px 13px;font-size:12px" id="bsalPreview">
+        預覽：將建立 0 筆薪資項目
+      </div>
+    </div>
+
     <!-- 刪除確認 -->
     <div id="batchDelWrap" style="display:none">
       <div style="background:#fdf0ec;border-radius:9px;padding:12px 14px;text-align:center">
@@ -1661,6 +1759,9 @@ function openTuiQuick(){
   tqDate=document.getElementById('qDate')?.value||today();
   tqChild='nora'; setTqChild('nora');
   ['tqSch','tqSub','tqNote'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  // 把金額帶入視窗的金額欄，讓使用者可以確認或修改
+  const amtEl=document.getElementById('tqAmt');
+  if(amtEl) amtEl.value = tqAmount || '';
   updateTqActual();
   document.getElementById('tuiQuickModal').classList.add('on');
 }
@@ -1673,13 +1774,18 @@ function setTqChild(c){
   db.style.cssText=on+(c==='dennis'?'var(--sage);background:var(--sage);color:#fff':'var(--border);background:var(--paper);color:var(--muted)');
 }
 function updateTqActual(){
+  const amt=parseFloat(document.getElementById('tqAmt')?.value)||tqAmount||0;
   const sub=parseFloat(document.getElementById('tqSub')?.value)||0;
   const el=document.getElementById('tqActual');
-  if(el) el.textContent=fmt(Math.max(0,tqAmount-sub));
+  if(el) el.textContent=fmt(Math.max(0,amt-sub));
 }
 async function submitTuiQuick(){
   const sn=(document.getElementById('tqSch')?.value||'').trim();
-  if(!sn){toast('請填學校名稱');return}
+  if(!sn){toast('⚠️ 請填學校名稱');return}
+  // 讀取視窗裡的金額（可能是從收支帶入，也可能是手動填的）
+  const amtFromField=parseFloat(document.getElementById('tqAmt')?.value)||0;
+  tqAmount = amtFromField;
+  if(!tqAmount){toast('⚠️ 請填費用金額');return}
   const sub=parseFloat(document.getElementById('tqSub')?.value)||0;
   const catVal=document.getElementById('tqCat')?.value||'kinder';
   const pay=document.getElementById('tqPay')?.value||'';
@@ -1730,7 +1836,32 @@ function batchAction(action){
   document.getElementById('batchConfirmBtns').style.display='flex';
   const titles={date:'📅 批次改日期',cat:'🏷 批次改類別',pay:'💳 批次改付款方式',biz:'💼 批次標記出差',del:'🗑️ 批次刪除'};
   document.getElementById('batchModalTitle').textContent=titles[action]+'（'+cnt+' 筆）';
-  if(action==='date'){document.getElementById('batchDateWrap').style.display='block';document.getElementById('batchDate').value=today();}
+  if(action==='tui'){
+    document.getElementById('batchTuiWrap').style.display='block';
+    setBtqChild('nora');
+    document.getElementById('btqSch').value='';
+    document.getElementById('btqSub').value='0';
+    updateBtqPreview();
+  }
+  else if(action==='sal'){
+    document.getElementById('batchSalWrap').style.display='block';
+    // 初始化年月選單
+    const now=new Date();
+    const bsYr=document.getElementById('bsalYr');
+    if(bsYr && !bsYr.options.length){
+      for(let y=now.getFullYear()+1;y>=2021;y--){
+        const o=document.createElement('option');
+        o.value=y; o.textContent=y+'年';
+        if(y===now.getFullYear()) o.selected=true;
+        bsYr.appendChild(o);
+      }
+    }
+    // 預設月份為當月
+    const bsMo=document.getElementById('bsalMo');
+    if(bsMo) bsMo.value=now.getMonth()+1;
+    updateBsalPreview();
+  }
+  else if(action==='date'){document.getElementById('batchDateWrap').style.display='block';document.getElementById('batchDate').value=today();}
   else if(action==='cat'){document.getElementById('batchCatWrap').style.display='block';}
   else if(action==='pay'){document.getElementById('batchPayWrap').style.display='block';}
   else if(action==='biz'){document.getElementById('batchBizWrap').style.display='block';document.getElementById('batchConfirmBtns').style.display='none';}
@@ -1773,9 +1904,141 @@ async function batchConfirm(){
     for(const id of ids){const idx=records.findIndex(r=>r.id===id);if(idx>=0){records[idx].payment=newPay;if(id>9e6)setLS('rn',records.filter(x=>x.id>9e6));else{const e=getLS('rn_e',{});e[id]={...records[idx]};setLS('rn_e',e);}await updateInGS('records',id,{payment:newPay});}}
     toast('✅ 已將 '+ids.length+' 筆付款改為「'+newPay+'」');
   }
+  else if(action==='tui'){
+    await batchSyncToTuition();
+    return;
+  }
+  else if(action==='sal'){
+    await batchSyncToSalary();
+    return;
+  }
   document.getElementById('batchModal').classList.remove('on');
   batchSelected.clear(); renderList(); updateBatchCount();
 }
+// ══ 批次同步學費 ══
+let btqChild = 'nora';
+
+function setBtqChild(c) {
+  btqChild = c;
+  const nb=document.getElementById('btqNora'), db=document.getElementById('btqDennis');
+  const on='flex:1;padding:9px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer;font-weight:600;border:2px solid ';
+  nb.style.cssText=on+(c==='nora'?'var(--rust);background:var(--rust);color:#fff':'var(--border);background:var(--paper);color:var(--muted)');
+  db.style.cssText=on+(c==='dennis'?'var(--sage);background:var(--sage);color:#fff':'var(--border);background:var(--paper);color:var(--muted)');
+  updateBtqPreview();
+}
+
+function updateBtqPreview() {
+  const cnt = batchSelected.size;
+  const el = document.getElementById('btqPreview');
+  if(el) el.textContent = '預覽：將建立 '+cnt+' 筆學費記錄到 '+(btqChild==='nora'?'Nora':'Dennis')+' 的學費頁';
+}
+
+async function batchSyncToTuition() {
+  const sn = (document.getElementById('btqSch')?.value||'').trim();
+  if(!sn) { toast('⚠️ 請填學校名稱'); return; }
+  const catVal = document.getElementById('btqCat')?.value || 'kinder';
+  const sub    = parseFloat(document.getElementById('btqSub')?.value) || 0;
+  const pay    = document.getElementById('btqPay')?.value || '';
+  const ids    = [...batchSelected];
+  let count    = 0;
+
+  for(const id of ids) {
+    const rec = records.find(r=>r.id===id);
+    if(!rec || rec.type !== 'expense') continue;
+
+    const tuiItem = {
+      id:          Date.now() + 9e6 + count,
+      date:        rec.date,
+      child:       btqChild,
+      school:      sn,
+      category:    catVal,
+      reg_fee:     0,
+      ins_fee:     0,
+      monthly:     rec.amount,
+      extra:       0,
+      session_fee: 0,
+      subsidy:     sub,
+      total:       rec.amount,
+      actual:      Math.max(0, rec.amount - sub),
+      payment:     pay || rec.payment || '',
+      note:        rec.note || '',
+      autoFrom:    'batch_records'
+    };
+
+    if(btqChild === 'nora') {
+      tuitionN.unshift(tuiItem);
+      setLS('tn', tuitionN.filter(x=>x.id>9e6));
+      await pushToGS('tuitionN', tuiItem);
+    } else {
+      tuitionD.unshift(tuiItem);
+      setLS('td', tuitionD.filter(x=>x.id>9e6));
+      await pushToGS('tuitionD', tuiItem);
+    }
+    count++;
+    // 短暫等待避免 id 重複
+    await new Promise(r=>setTimeout(r,30));
+  }
+
+  document.getElementById('batchModal').classList.remove('on');
+  batchSelected.clear();
+  renderList(); updateBatchCount();
+  toast('✅ 已將 '+count+' 筆同步到 '+(btqChild==='nora'?'Nora':'Dennis')+' 學費頁！');
+}
+
+// ══ 批次同步薪資 ══
+function updateBsalPreview() {
+  const cnt = [...batchSelected].filter(id => {
+    const r = records.find(x=>x.id===id);
+    return r && r.type==='income';
+  }).length;
+  const el = document.getElementById('bsalPreview');
+  if(!el) return;
+  const ids = [...batchSelected];
+  const items = ids.map(id=>{
+    const r=records.find(x=>x.id===id);
+    if(!r||r.type!=='income') return null;
+    return r.note+'：'+fmt(r.amount);
+  }).filter(Boolean);
+  el.innerHTML = '<b>將建立薪資記錄，包含以下項目：</b><br>' +
+    (items.length ? items.map(i=>'・'+i).join('<br>') : '（未選收入記錄）') +
+    '<br><br><span style="color:var(--muted)">合計：'+fmt(ids.reduce((a,id)=>{const r=records.find(x=>x.id===id);return a+(r&&r.type==='income'?r.amount:0)},0))+'</span>';
+}
+
+async function batchSyncToSalary() {
+  const yr  = parseInt(document.getElementById('bsalYr')?.value);
+  const mo  = parseInt(document.getElementById('bsalMo')?.value);
+  if(!yr||!mo) { toast('⚠️ 請選年月'); return; }
+
+  const ids = [...batchSelected];
+  const incRecs = ids.map(id=>records.find(r=>r.id===id)).filter(r=>r&&r.type==='income');
+
+  if(!incRecs.length) { toast('⚠️ 請勾選收入記錄'); return; }
+
+  const total = incRecs.reduce((a,r)=>a+r.amount, 0);
+  const items = incRecs.map(r=>({
+    label: r.note || r.cat || '薪資項目',
+    amount: r.amount
+  }));
+
+  const salItem = {
+    id:    Date.now()+9e6,
+    year:  yr,
+    month: mo,
+    total,
+    items,
+    items_json: JSON.stringify(items)
+  };
+
+  salaries.unshift(salItem);
+  setLS('sn', salaries.filter(x=>x.id>9e6));
+  await pushToGS('salary', salItem);
+
+  document.getElementById('batchModal').classList.remove('on');
+  batchSelected.clear();
+  renderList(); updateBatchCount();
+  toast('✅ 已建立 '+yr+'年'+mo+'月薪資記錄（'+fmt(total)+'）');
+}
+
 // ══ INIT ══
 async function manualSync() {
   setSyncUI('syncing','同步中…');
