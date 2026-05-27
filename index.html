@@ -1089,14 +1089,12 @@ async function loadFromGS() {
 // ══ 同步新記錄到 GS ══
 async function pushToGS(sheetKey, data) {
   try {
-    document.getElementById('syncBtn').classList.add('syncing');
+    setSyncUI('syncing', '同步中…');
     await gasPost({ action: 'append', sheet: sheetKey, data });
-    document.getElementById('syncBtn').classList.remove('syncing');
-    setSyncStatus('ok', '已同步 · ' + new Date().toLocaleTimeString('zh-TW'));
+    setSyncUI('ok', '已同步');
     return true;
   } catch(err) {
-    document.getElementById('syncBtn').classList.remove('syncing');
-    setSyncStatus('err', '同步失敗，資料已存本機');
+    setSyncUI('error', '同步失敗');
     console.error('pushToGS error:', err);
     return false;
   }
