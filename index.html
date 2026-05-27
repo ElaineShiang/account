@@ -999,6 +999,15 @@ async function retryPending() {
 }
 
 // ══ UTILS ══
+// localStorage 封裝（setLS/getLS 供全站使用）
+function setLS(k, v) {
+  try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) { console.error('setLS error:', e); }
+}
+function getLS(k, def) {
+  try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : def; }
+  catch(e) { return def; }
+}
+
 // 修正時區問題：把 ISO 格式日期統一轉成台灣本地日期 YYYY-MM-DD
 function fixDate(dateStr) {
   if(!dateStr) return dateStr;
