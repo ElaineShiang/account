@@ -278,6 +278,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     </div>
     <button class="sbtn" onclick="addSal()">儲存</button>
   </div>
+  <!-- 薪資搜尋 -->
+  <div class="srch-wrap" style="margin-top:10px;margin-bottom:0">
+    <input class="srch" type="search" id="salSrch" placeholder="搜尋年月、金額、項目…" oninput="renderSalWithSearch()">
+    <button class="srch-clr" onclick="document.getElementById('salSrch').value='';renderSalWithSearch()">清除</button>
+  </div>
   <div id="salYV"></div>
 </div>
 
@@ -293,6 +298,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <button class="cchip" onclick="swC('dennis',this)">🌿 Dennis</button>
     </div>
     <div id="tuiStats"></div>
+    <!-- 學費搜尋 -->
+    <div class="srch-wrap" style="margin-bottom:10px">
+      <input class="srch" type="search" id="tuiSrch" placeholder="搜尋學校、金額、備註…" oninput="renderTui()">
+      <button class="srch-clr" onclick="document.getElementById('tuiSrch').value='';renderTui()">清除</button>
+    </div>
     <div class="chips" id="tuiCF"></div>
     <div class="card"><div class="ct">＋ 新增費用</div>
       <div id="tuiCatBtns" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px"></div>
@@ -562,6 +572,56 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     </div>
     <div id="rPreview" style="margin-bottom:10px"></div>
     <button class="sbtn" onclick="dlReport()">⬇ 下載 HTML 報告</button>
+  </div>
+</div>
+
+<!-- 學費編輯 Modal -->
+<div class="modal-bg" id="tuiEditModal">
+  <div class="modal">
+    <div class="modal-ttl">✏️ 編輯學費記錄
+      <button class="modal-x" onclick="document.getElementById('tuiEditModal').classList.remove('on')">✕</button>
+    </div>
+    <input type="hidden" id="tuiEditId">
+    <input type="hidden" id="tuiEditChild">
+    <div class="fr2 fr">
+      <div><label class="fl">日期</label><input class="fi" type="date" id="tuiEditDate"></div>
+      <div><label class="fl">學校</label><input class="fi" type="text" id="tuiEditSch"></div>
+    </div>
+    <div class="fr"><label class="fl">費用類別</label>
+      <select class="fs" id="tuiEditCat">
+        <option value="kinder">🌱 幼兒園</option>
+        <option value="daycare">🏡 公托</option>
+        <option value="nursery">👶 托嬰中心</option>
+        <option value="primary">📚 國小</option>
+        <option value="aftercare">🌇 安親班</option>
+        <option value="cram">📖 補習班</option>
+        <option value="talent">🎨 才藝班</option>
+        <option value="other">💡 其他</option>
+      </select>
+    </div>
+    <div class="fr2 fr">
+      <div><label class="fl">月費</label><input class="fi" type="number" id="tuiEditMonthly" inputmode="numeric" oninput="calcTuiEdit()"></div>
+      <div><label class="fl">補助款</label><input class="fi" type="number" id="tuiEditSub" inputmode="numeric" oninput="calcTuiEdit()"></div>
+    </div>
+    <div class="fr2 fr">
+      <div><label class="fl">雜費</label><input class="fi" type="number" id="tuiEditExtra" inputmode="numeric" oninput="calcTuiEdit()"></div>
+      <div><label class="fl">付款方式</label>
+        <select class="fs" id="tuiEditPay">
+          <option>台灣行動支付</option><option>現金</option>
+          <option>玉山銀行</option><option>中信 Line Pay</option>
+        </select>
+      </div>
+    </div>
+    <div class="fr"><label class="fl">備註</label><input class="fi" type="text" id="tuiEditNote"></div>
+    <div style="background:var(--cream);border-radius:9px;padding:9px 13px;margin-bottom:10px">
+      <div class="fb"><span style="font-size:11px;color:var(--muted)">實付金額</span>
+        <span id="tuiEditActual" style="font-family:'DM Mono';font-size:17px;color:var(--exp);font-weight:600">$0</span>
+      </div>
+    </div>
+    <div class="fr2">
+      <button class="sbtn sec" onclick="document.getElementById('tuiEditModal').classList.remove('on')">取消</button>
+      <button class="sbtn" onclick="saveEditTui()">儲存</button>
+    </div>
   </div>
 </div>
 
@@ -1623,7 +1683,24 @@ const TCATS=[
   {id:'other',label:'💡 其他',icon:'💡',color:'#8a8070',fields:[{id:'tM',label:'金額',oi:true},{id:'tE',label:'其他'}]},
 ];
 const CLBL={nursery:'托嬰',daycare:'公托',kinder:'幼兒園',primary:'國小',aftercare:'安親班',cram:'補習班',talent:'才藝班',other:'其他'};
-function inferCat(s){if(!s)return'other';if(s.includes('托嬰'))return'nursery';if(s.includes('公托'))return'daycare';if(s.includes('大幼班')||s.includes('幼兒園')||s.includes('幼稚園'))return'kinder';if(s.includes('安親'))return'aftercare';if(s.includes('補習'))return'cram';if(s.includes('才藝')||s.includes('音樂')||s.includes('舞蹈')||s.includes('美術')||s.includes('體操')||s.includes('圍棋')||s.includes('英文'))return'talent';if(s.includes('國小')||s.includes('小學'))return'primary';return'other'}
+function inferCat(s){
+  if(!s) return 'other';
+  // 已經是正確的 id 格式
+  const validIds = ['nursery','daycare','kinder','primary','aftercare','cram','talent','other'];
+  if(validIds.includes(s)) return s;
+  // 中文類別名稱對應
+  const map = {'托嬰中心':'nursery','公托':'daycare','幼兒園':'kinder','國小':'primary','安親班':'aftercare','補習班':'cram','才藝班':'talent','其他':'other'};
+  if(map[s]) return map[s];
+  // 從學校名稱推算
+  if(s.includes('托嬰')) return 'nursery';
+  if(s.includes('公托')) return 'daycare';
+  if(s.includes('大幼班')||s.includes('幼兒園')||s.includes('幼稚園')) return 'kinder';
+  if(s.includes('安親')) return 'aftercare';
+  if(s.includes('補習')) return 'cram';
+  if(s.includes('才藝')||s.includes('音樂')||s.includes('舞蹈')||s.includes('美術')||s.includes('體操')||s.includes('圍棋')||s.includes('英文')) return 'talent';
+  if(s.includes('國小')||s.includes('小學')) return 'primary';
+  return 'other';
+}
 let cC='nora',cTC='kinder',cTF='all';
 function swC(c,btn){cC=c;document.querySelectorAll('#kTui .cchip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');cTC=c==='nora'?'kinder':'daycare';buildTCB();buildTDF();renderTui()}
 function swKSub(s,btn){document.querySelectorAll('#kSubTab .chip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');document.getElementById('kTui').style.display=s==='t'?'block':'none';document.getElementById('kHb').style.display=s==='h'?'block':'none'}
@@ -1676,7 +1753,15 @@ function renderTui(){
   }
   const fe=document.getElementById('tuiCF');
   if(fe){const cats=[...new Set(list.map(t=>t.category||inferCat(t.school||'')))];fe.innerHTML=`<button class="chip ${cTF==='all'?'on':''}" onclick="filtTC('all')">全部</button>`+cats.map(cat=>{const cd=TCATS.find(c=>c.id===cat)||{label:CLBL[cat]||cat,icon:'📌'};return`<button class="chip ${cTF===cat?'on':''}" onclick="filtTC('${cat}')">${cd.icon} ${cd.label}</button>`}).join('')}
-  const filtered=cTF==='all'?list:list.filter(t=>(t.category||inferCat(t.school||''))===cTF);
+  // 搜尋過濾
+  const tuiQ=(document.getElementById('tuiSrch')?.value||'').trim().toLowerCase();
+  let filtered=cTF==='all'?list:list.filter(t=>(t.category||inferCat(t.school||''))===cTF);
+  if(tuiQ) filtered=filtered.filter(t=>
+    (t.school||'').toLowerCase().includes(tuiQ)||
+    (t.note||'').toLowerCase().includes(tuiQ)||
+    String(t.actual||t.total||'').includes(tuiQ)||
+    (t.date||'').includes(tuiQ)
+  );
   const bySch={};filtered.forEach(t=>{const k=(t.category||inferCat(t.school||''))+'_'+(t.school||'其他');if(!bySch[k])bySch[k]={cat:t.category||inferCat(t.school||''),school:t.school||'其他',rows:[]};bySch[k].rows.push(t)});
   const el=document.getElementById('tList');if(!el)return;
   if(!filtered.length){el.innerHTML='<div class="empty">尚無記錄</div>';return}
@@ -1684,7 +1769,24 @@ function renderTui(){
   el.innerHTML=Object.values(bySch).map(g=>{
     const cd=TCATS.find(c=>c.id===g.cat)||{label:CLBL[g.cat]||g.cat,icon:'📌',color:'var(--muted)'};
     const sT=g.rows.reduce((a,b)=>a+(b.actual||b.total||0),0),sS=g.rows.reduce((a,b)=>a+(b.subsidy||0),0);
-    return`<div class="card"><div class="ct fb" style="flex-direction:row;gap:0"><span>${cd.icon} ${g.school} <span style="font-size:9px;padding:1px 5px;border-radius:5px;background:${cd.color};color:#fff;margin-left:3px">${cd.label}</span></span><span style="font-size:10px;color:var(--muted);margin-left:auto">實付 ${fmt(sT)}${sS?' ・補助 '+fmt(sS):''}</span></div>${g.rows.map(t=>{const parts=[];if(t.reg_fee)parts.push('註冊 '+fmt(t.reg_fee));if(t.ins_fee)parts.push('團保 '+fmt(t.ins_fee));if(t.monthly)parts.push('月費 '+fmt(t.monthly));if(t.session_fee)parts.push('課程 '+fmt(t.session_fee));if(t.extra)parts.push('雜費 '+fmt(t.extra));return`<div class="te"><div style="flex:1;min-width:0"><div style="font-size:10px;color:var(--muted);font-family:'DM Mono'">${t.date}</div><div style="font-size:12px;margin-top:1px">${parts.join(' ＋ ')||'—'}</div>${t.subsidy?`<div style="font-size:10px;color:var(--sage)">補助 -${fmt(t.subsidy)}</div>`:''}</div><div style="text-align:right;flex-shrink:0;margin-left:8px">${t.total!==t.actual?`<div style="font-size:10px;color:var(--muted)">繳 ${fmt(t.total)}</div>`:''}  <div style="font-family:'DM Mono';font-size:13px;color:var(--exp);font-weight:600">${fmt(t.actual||t.total)}</div></div></div>`;}).join('')}</div>`;
+    return`<div class="card"><div class="ct fb" style="flex-direction:row;gap:0"><span>${cd.icon} ${g.school} <span style="font-size:9px;padding:1px 5px;border-radius:5px;background:${cd.color};color:#fff;margin-left:3px">${cd.label}</span></span><span style="font-size:10px;color:var(--muted);margin-left:auto">實付 ${fmt(sT)}${sS?' ・補助 '+fmt(sS):''}</span></div>${g.rows.map(t=>{const parts=[];if(t.reg_fee)parts.push('註冊 '+fmt(t.reg_fee));if(t.ins_fee)parts.push('團保 '+fmt(t.ins_fee));if(t.monthly)parts.push('月費 '+fmt(t.monthly));if(t.session_fee)parts.push('課程 '+fmt(t.session_fee));if(t.extra)parts.push('雜費 '+fmt(t.extra));
+      const rowHtml='<div class="te" style="align-items:flex-start">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace">'+t.date+'</div>'+
+          '<div style="font-size:12px;margin-top:1px">'+(parts.join(' ＋ ')||'—')+'</div>'+
+          (t.note?'<div style="font-size:11px;color:var(--muted);margin-top:1px">📝 '+t.note+'</div>':'')+
+          (t.subsidy?'<div style="font-size:10px;color:var(--sage)">補助 -'+fmt(t.subsidy)+'</div>':'')+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;margin-left:8px">'+
+          (t.total!==t.actual?'<div style="font-size:10px;color:var(--muted)">繳 '+fmt(t.total)+'</div>':'')+
+          '<div style="font-family:DM Mono,monospace;font-size:13px;color:var(--exp);font-weight:600">'+fmt(t.actual||t.total)+'</div>'+
+          '<div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px">'+
+            '<button data-id="'+t.id+'" data-child="'+cC+'" onclick="openEditTuiBtn(this)" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--paper);color:var(--sky);cursor:pointer">✏️</button>'+
+            '<button data-id="'+t.id+'" data-child="'+cC+'" onclick="delTuiBtn(this)" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--paper);color:var(--exp);cursor:pointer">✕</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+      return rowHtml;}).join('')}/div>`;
   }).join('');
 }
 function filtTC(c){cTF=c;renderTui()}
@@ -1968,7 +2070,7 @@ async function batchSyncToTuition() {
       total:       rec.amount,
       actual:      Math.max(0, rec.amount - sub),
       payment:     pay || rec.payment || '',
-      note:        rec.note || '',
+      note:        rec.note || rec.cat || '',  // 保留收支備註作為說明
       autoFrom:    'batch_records'
     };
 
@@ -2044,6 +2146,142 @@ async function batchSyncToSalary() {
   batchSelected.clear();
   renderList(); updateBatchCount();
   toast('✅ 已建立 '+yr+'年'+mo+'月薪資記錄（'+fmt(total)+'）');
+}
+
+// ══ 學費編輯/刪除 ══
+function openEditTuiBtn(btn) { openEditTui(btn.dataset.child, +btn.dataset.id); }
+function delTuiBtn(btn) { delTui(btn.dataset.child, +btn.dataset.id); }
+function openEditTui(child, id) {
+  const list = child==='nora' ? tuitionN : tuitionD;
+  const t = list.find(x=>x.id===id);
+  if(!t) return;
+  document.getElementById('tuiEditId').value = id;
+  document.getElementById('tuiEditChild').value = child;
+  document.getElementById('tuiEditDate').value = t.date||'';
+  document.getElementById('tuiEditSch').value = t.school||'';
+  document.getElementById('tuiEditCat').value = t.category||inferCat(t.school||'');
+  document.getElementById('tuiEditMonthly').value = t.monthly||0;
+  document.getElementById('tuiEditSub').value = t.subsidy||0;
+  document.getElementById('tuiEditExtra').value = t.extra||0;
+  document.getElementById('tuiEditPay').value = t.payment||'';
+  document.getElementById('tuiEditNote').value = t.note||'';
+  calcTuiEdit();
+  document.getElementById('tuiEditModal').classList.add('on');
+}
+
+function calcTuiEdit() {
+  const m = parseFloat(document.getElementById('tuiEditMonthly')?.value)||0;
+  const e = parseFloat(document.getElementById('tuiEditExtra')?.value)||0;
+  const s = parseFloat(document.getElementById('tuiEditSub')?.value)||0;
+  document.getElementById('tuiEditActual').textContent = fmt(Math.max(0, m+e-s));
+}
+
+async function saveEditTui() {
+  const id = +document.getElementById('tuiEditId').value;
+  const child = document.getElementById('tuiEditChild').value;
+  const m = parseFloat(document.getElementById('tuiEditMonthly')?.value)||0;
+  const e = parseFloat(document.getElementById('tuiEditExtra')?.value)||0;
+  const s = parseFloat(document.getElementById('tuiEditSub')?.value)||0;
+  const changes = {
+    date:     document.getElementById('tuiEditDate').value,
+    school:   document.getElementById('tuiEditSch').value.trim(),
+    category: document.getElementById('tuiEditCat').value,
+    monthly:  m, extra: e, subsidy: s,
+    total:    m+e, actual: Math.max(0,m+e-s),
+    payment:  document.getElementById('tuiEditPay').value,
+    note:     document.getElementById('tuiEditNote').value.trim()
+  };
+  const list = child==='nora' ? tuitionN : tuitionD;
+  const idx = list.findIndex(x=>x.id===id);
+  if(idx>=0) {
+    list[idx] = {...list[idx], ...changes};
+    if(child==='nora') { setLS('tn', tuitionN.filter(x=>x.id>9e6)); }
+    else { setLS('td', tuitionD.filter(x=>x.id>9e6)); }
+    await updateInGS(child==='nora'?'tuitionN':'tuitionD', id, changes);
+  }
+  document.getElementById('tuiEditModal').classList.remove('on');
+  renderTui(); toast('✅ 學費記錄已更新');
+}
+
+async function delTui(child, id) {
+  if(!confirm('確認刪除此筆學費記錄？')) return;
+  if(child==='nora') {
+    tuitionN = tuitionN.filter(x=>x.id!==id);
+    setLS('tn', tuitionN.filter(x=>x.id>9e6));
+  } else {
+    tuitionD = tuitionD.filter(x=>x.id!==id);
+    setLS('td', tuitionD.filter(x=>x.id>9e6));
+  }
+  await deleteInGS(child==='nora'?'tuitionN':'tuitionD', id);
+  renderTui(); toast('已刪除');
+}
+
+// ══ 薪資搜尋/編輯/刪除 ══
+function renderSalWithSearch() {
+  const q = (document.getElementById('salSrch')?.value||'').trim().toLowerCase();
+  const el = document.getElementById('salYV');
+  if(!salaries.length){ el.innerHTML='<div class="empty">尚無記錄</div>'; return; }
+  const bY = {};
+  salaries.forEach(s=>{
+    if(q) {
+      const match = String(s.year+'/'+s.month).includes(q) ||
+        fmt(s.total).includes(q) ||
+        s.items.some(it=>(it.label||'').includes(q));
+      if(!match) return;
+    }
+    if(!bY[s.year]) bY[s.year]=[];
+    bY[s.year].push(s);
+  });
+  el.innerHTML = Object.keys(bY).sort((a,b)=>b-a).map(y=>{
+    const its=bY[y], yt=its.reduce((a,b)=>a+b.total,0);
+    return`<div class="card"><div class="yr-sum"><b>${y}年</b> 年薪 <b>${fmt(yt)}</b></div>
+      ${its.map(s=>`<div class="salc">
+        <div class="fb" style="margin-bottom:6px">
+          <span style="font-weight:600;font-size:13px">${s.year}/${String(s.month).padStart(2,'0')}</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-family:'DM Mono';font-size:13px;color:var(--inc)">${fmt(s.total)}</span>
+            <button onclick="openEditSal(${s.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:var(--paper);color:var(--sky);cursor:pointer">✏️</button>
+            <button onclick="delSal(${s.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:var(--paper);color:var(--exp);cursor:pointer">✕</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:3px">
+          ${s.items.map(it=>{const hi=['薪資','節金','全勤','代墊','出差','差旅','午餐','晚餐','國外'].some(k=>it.label.includes(k));const lo=['勞保','健保'].some(k=>it.label.includes(k));return`<span class="stag ${hi?'hi':lo?'lo':''}">${it.label} ${fmt(it.amount)}</span>`}).join('')}
+        </div>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+let editSalId = null;
+function openEditSal(id) {
+  const s = salaries.find(x=>x.id===id);
+  if(!s) return;
+  editSalId = id;
+  // 用現有的薪資表單填入資料
+  const yr=document.getElementById('salYr'), mo=document.getElementById('salMo');
+  if(yr) yr.value=s.year;
+  if(mo) mo.value=s.month;
+  // 填各項明細
+  const map={sB:'薪資',sBn:'節金',sOT:'加班/門禁',sMl:'餐費',sRe:'代墊',sFA:'全勤'};
+  Object.entries(map).forEach(([id2,l])=>{
+    const el=document.getElementById(id2); if(!el)return;
+    const item=s.items.find(it=>it.label===l); el.value=item?item.amount:'';
+  });
+  const otherItem=s.items.find(it=>!Object.values(map).includes(it.label));
+  const snEl=document.getElementById('sNote'); if(snEl) snEl.value=otherItem?otherItem.label:'';
+  const soEl=document.getElementById('sOth');  if(soEl) soEl.value=otherItem?otherItem.amount:'';
+  calcS();
+  // 捲到薪資新增表單
+  document.getElementById('pg-salary').scrollTo({top:0,behavior:'smooth'});
+  toast('📋 已載入薪資資料，修改後按儲存');
+}
+
+async function delSal(id) {
+  if(!confirm('確認刪除此筆薪資記錄？')) return;
+  salaries = salaries.filter(x=>x.id!==id);
+  setLS('sn', salaries.filter(x=>x.id>9e6));
+  await deleteInGS('salary', id);
+  renderSalWithSearch(); toast('已刪除');
 }
 
 // ══ INIT ══
