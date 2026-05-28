@@ -1086,6 +1086,15 @@ function fixDate(dateStr) {
 function fixRecordDates(arr) {
   return arr.map(r => ({...r, date: fixDate(r.date)}));
 }
+// 修正學費 category：虹橋大幼班統一改成 bigkinder
+function fixTuitionCats(arr) {
+  return arr.map(t => {
+    if(t.school === '虹橋大幼班' && t.category === 'kinder') {
+      return {...t, category: 'bigkinder'};
+    }
+    return t;
+  });
+}
 
 function togPayOther(wrapId, val) {
   const el = document.getElementById(wrapId);
@@ -1144,8 +1153,8 @@ async function loadFromGS() {
     const d = result.data;
     if(d.records  && d.records.length)  records  = fixRecordDates(d.records).sort((a,b)=>b.date.localeCompare(a.date));
     if(d.salary   && d.salary.length)   salaries = d.salary;
-    if(d.tuitionN && d.tuitionN.length) tuitionN = fixRecordDates(d.tuitionN);
-    if(d.tuitionD && d.tuitionD.length) tuitionD = fixRecordDates(d.tuitionD);
+    if(d.tuitionN && d.tuitionN.length) tuitionN = fixTuitionCats(fixRecordDates(d.tuitionN));
+    if(d.tuitionD && d.tuitionD.length) tuitionD = fixTuitionCats(fixRecordDates(d.tuitionD));
     if(d.hbN      && d.hbN.length)      hongbaoN = d.hbN;
     if(d.hbD      && d.hbD.length)      hongbaoD = d.hbD;
     if(d.stocks   && d.stocks.length)   stocks   = d.stocks;
