@@ -1097,6 +1097,57 @@ function fixTuitionCats(arr) {
   });
 }
 
+// ── 備份匯出/匯入 ──
+function exportBackup() {
+  const data = {
+    version: 2,
+    exportTime: new Date().toISOString(),
+    records:  records,
+    salaries: salaries,
+    tuitionN: tuitionN,
+    tuitionD: tuitionD,
+    stocks:   stocks,
+    savings:  savingsH
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  a.href     = url;
+  a.download = '家庭記帳本備份_' + date + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  setLS('lastBkTime', new Date().toLocaleString('zh-TW'));
+  const el = document.getElementById('lastBkTime');
+  if(el) el.textContent = new Date().toLocaleString('zh-TW');
+  toast('✅ 備份已下載！');
+}
+
+function importBackup(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if(!data.records) throw new Error('格式不正確');
+      if(!confirm('確認還原備份？現有資料將被覆蓋。\n備份時間：' + (data.exportTime||'未知'))) return;
+      records   = data.records  || records;
+      salaries  = data.salaries || salaries;
+      tuitionN  = data.tuitionN || tuitionN;
+      tuitionD  = data.tuitionD || tuitionD;
+      stocks    = data.stocks   || stocks;
+      savingsH  = data.savings  || savingsH;
+      renderDash(); renderIE(); renderSalWithSearch(); renderTui();
+      toast('✅ 備份已還原！共 ' + records.length + ' 筆記錄');
+    } catch(err) {
+      toast('❌ 備份格式錯誤：' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
 function togPayOther(wrapId, val) {
   const el = document.getElementById(wrapId);
   if(el) el.style.display = val === '其他（請填備註）' ? 'block' : 'none';
