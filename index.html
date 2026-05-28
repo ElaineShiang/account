@@ -1089,7 +1089,8 @@ function fixRecordDates(arr) {
 // 修正學費 category：虹橋大幼班統一改成 bigkinder
 function fixTuitionCats(arr) {
   return arr.map(t => {
-    if(t.school === '虹橋大幼班' && t.category === 'kinder') {
+    if(t.school === '虹橋大幼班') {
+      // GS 裡可能是 'kinder' 或 '幼兒園'，統一改成 bigkinder
       return {...t, category: 'bigkinder'};
     }
     return t;
