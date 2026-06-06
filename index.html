@@ -253,9 +253,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <button class="sbtn" style="margin-top:10px" onclick="openReport()">📄 下載年度報告</button>
 </div>
 
-<!-- 薪水 -->
+<!-- 薪資 -->
 <div class="pg" id="pg-salary">
-  <div class="ttl">薪水記錄</div><div class="sub">薪資結構 · 月薪明細</div>
+  <div class="ttl">薪資記錄</div><div class="sub">薪資結構 · 月薪明細</div>
   <div class="card"><div class="ct">📐 薪資結構歷程</div>
     <div class="sal-sw"><table class="sal-tbl" id="salTbl"></table></div>
   </div>
@@ -465,7 +465,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <button class="bnt" id="bn-ie" onclick="go('ie',this)"><span class="bnt-ic">💰</span>收支</button>
   <button class="bnt" id="bn-analysis" onclick="go('analysis',this)"><span class="bnt-ic">📊</span>分析</button>
   <button class="bnt" id="bn-kids" onclick="go('kids',this)"><span class="bnt-ic">🏫</span>學費</button>
-  <button class="bnt" id="bn-salary" onclick="go('salary',this)"><span class="bnt-ic">📋</span>薪水</button>
+  <button class="bnt" id="bn-salary" onclick="go('salary',this)"><span class="bnt-ic">📋</span>薪資</button>
   <button class="bnt" id="bn-assets" onclick="go('assets',this)"><span class="bnt-ic">🏦</span>資產</button>
 </nav>
 
@@ -1712,7 +1712,7 @@ function dlReport(){
   toast('✓ 年度報告已下載');
 }
 
-// ══ 薪水 ══
+// ══ 薪資 ══
 function initSalYrs(){const s=document.getElementById('salYr');const c=new Date().getFullYear();for(let y=c+1;y>=2021;y--)s.innerHTML+=`<option ${y===c?'selected':''}>${y}</option>`}
 function toggleSalItem(key) {
   const el = document.getElementById('f_'+key);
