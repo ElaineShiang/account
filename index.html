@@ -538,7 +538,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <select class="fs" id="qCat" onchange="onQCatChange(this.value)">
           <option value="">—</option>
           <optgroup label="支出"><option>食材/採買</option><option>外食</option><option>交通/加油</option><option>醫療</option><option>保健/美容</option><option>網購/蝦皮</option><option>訂閱/服務</option><option>保險</option><option>孩子費用</option><option>娛樂/出遊</option><option>衣物</option><option>紅包/禮金</option><option>其他支出</option></optgroup>
-          <optgroup label="收入"><option>薪資入帳</option><option>獎金</option><option>配息</option><option>補助款</option><option>代墊回收</option><option>其他收入</option></optgroup>
+          <optgroup label="收入"><option>薪資入帳</option><option>獎金</option><option>配息</option><option>補助款</option><option>代墊回收</option><option>其他收入</option></optgroup><optgroup label="投資"><option>投資買入</option></optgroup>
         </select>
       </div>
     </div>
@@ -593,7 +593,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <select class="fs" id="eCat">
           <option value="">—</option>
           <optgroup label="支出"><option>食材/採買</option><option>外食</option><option>交通/加油</option><option>醫療</option><option>保健/美容</option><option>網購/蝦皮</option><option>訂閱/服務</option><option>保險</option><option>孩子費用</option><option>娛樂/出遊</option><option>衣物</option><option>紅包/禮金</option><option>其他支出</option></optgroup>
-          <optgroup label="收入"><option>薪資入帳</option><option>獎金</option><option>配息</option><option>補助款</option><option>代墊回收</option><option>其他收入</option></optgroup>
+          <optgroup label="收入"><option>薪資入帳</option><option>獎金</option><option>配息</option><option>補助款</option><option>代墊回收</option><option>其他收入</option></optgroup><optgroup label="投資"><option>投資買入</option></optgroup>
         </select>
       </div>
       <div><label class="fl">付款</label>
@@ -706,6 +706,81 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   </div>
 </div>
 
+<!-- 配息快填 Modal -->
+<div class="modal-bg" id="divQuickModal">
+  <div class="modal">
+    <div class="modal-ttl">💰 配息記錄
+      <button class="modal-x" onclick="closeDivQuick()">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">填完後自動同步到投資頁的配息記錄</div>
+    <div class="fr">
+      <label class="fl">股票</label>
+      <select class="fs" id="dqStock">
+        <option value="">— 選擇股票 —</option>
+      </select>
+    </div>
+    <div class="fr">
+      <label class="fl">配息金額</label>
+      <input class="fi" type="number" id="dqAmt" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="fr">
+      <label class="fl">配息日期</label>
+      <input class="fi" type="date" id="dqDate">
+    </div>
+    <div class="fr2">
+      <button class="sbtn sec" onclick="closeDivQuick()">略過，只記收支</button>
+      <button class="sbtn" onclick="submitDivQuick()">同步配息記錄</button>
+    </div>
+  </div>
+</div>
+
+<!-- 投資買入快填 Modal -->
+<div class="modal-bg" id="buyQuickModal">
+  <div class="modal">
+    <div class="modal-ttl">📈 投資買入記錄
+      <button class="modal-x" onclick="closeBuyQuick()">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">填完後自動同步到投資頁的買入記錄</div>
+    <div class="fr">
+      <label class="fl">股票</label>
+      <select class="fs" id="bqStock">
+        <option value="">— 選已有股票 —</option>
+      </select>
+    </div>
+    <div style="text-align:center;font-size:11px;color:var(--muted);margin:-4px 0 8px">或新增股票</div>
+    <div class="fr2 fr">
+      <div>
+        <label class="fl">股票代號</label>
+        <input class="fi" type="text" id="bqCode" placeholder="如 2412">
+      </div>
+      <div>
+        <label class="fl">股票名稱</label>
+        <input class="fi" type="text" id="bqName" placeholder="如 中華電">
+      </div>
+    </div>
+    <div class="fr2 fr">
+      <div>
+        <label class="fl">買入價格</label>
+        <input class="fi" type="number" id="bqPrice" inputmode="decimal" placeholder="0.00" oninput="calcBqCost()">
+      </div>
+      <div>
+        <label class="fl">買入股數</label>
+        <input class="fi" type="number" id="bqShares" inputmode="numeric" placeholder="1000" oninput="calcBqCost()">
+      </div>
+    </div>
+    <div style="background:var(--cream);border-radius:9px;padding:9px 13px;margin-bottom:10px">
+      <div class="fb">
+        <span style="font-size:11px;color:var(--muted)">買入成本（從收支金額帶入）</span>
+        <span id="bqCostShow" style="font-family:'DM Mono';font-size:16px;color:var(--exp);font-weight:700">$0</span>
+      </div>
+    </div>
+    <div class="fr2">
+      <button class="sbtn sec" onclick="closeBuyQuick()">略過，只記收支</button>
+      <button class="sbtn" onclick="submitBuyQuick()">同步買入記錄</button>
+    </div>
+  </div>
+</div>
+
 <!-- 學費快填 Modal -->
 <div class="modal-bg" id="tuiQuickModal">
   <div class="modal">
@@ -814,7 +889,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <select class="fs" id="batchCat">
           <option value="">— 選擇 —</option>
           <optgroup label="支出"><option>食材/採買</option><option>外食</option><option>交通/加油</option><option>醫療</option><option>保健/美容</option><option>網購/蝦皮</option><option>訂閱/服務</option><option>保險</option><option>孩子費用</option><option>娛樂/出遊</option><option>衣物</option><option>紅包/禮金</option><option>其他支出</option></optgroup>
-          <optgroup label="收入"><option>薪資入帳</option><option>獎金</option><option>配息</option><option>補助款</option><option>代墊回收</option><option>其他收入</option></optgroup>
+          <optgroup label="收入"><option>薪資入帳</option><option>獎金</option><option>配息</option><option>補助款</option><option>代墊回收</option><option>其他收入</option></optgroup><optgroup label="投資"><option>投資買入</option></optgroup>
         </select>
       </div>
     </div>
@@ -2054,7 +2129,12 @@ function renderSk(){
 
 // ══ 學費快填（收支→學費自動同步）══
 let tqChild = 'nora', tqAmount = 0, tqDate = '';
-function onQCatChange(val){if(val==='孩子費用')setTimeout(()=>openTuiQuick(),100);else if(val==='薪資入帳')setTimeout(()=>openSalQuick(),100);}
+function onQCatChange(val){
+  if(val==='孩子費用') setTimeout(()=>openTuiQuick(),100);
+  else if(val==='薪資入帳') setTimeout(()=>openSalQuick(),100);
+  else if(val==='配息') setTimeout(()=>openDivQuick(),100);
+  else if(val==='投資買入') setTimeout(()=>openBuyQuick(),100);
+}
 function openTuiQuick(){
   tqAmount=parseFloat(document.getElementById('qAmt')?.value)||0;
   tqDate=document.getElementById('qDate')?.value||today();
@@ -2645,6 +2725,118 @@ function renderInvest() {
   if(pnlEl) { pnlEl.textContent = totalVal ? (totalPnl>=0?'+':'')+fmt(totalPnl) : '—'; pnlEl.style.color = totalPnl>=0?'var(--inc)':'var(--exp)'; }
   const retEl = document.getElementById('inv-ret');
   if(retEl) { retEl.textContent = totalRet ? (totalRet>=0?'+':'')+totalRet.toFixed(1)+'%' : '—'; retEl.style.color = totalRet>=0?'var(--inc)':'var(--exp)'; }
+}
+
+// ══ 投資同步（配息/買入）══
+function initInvestSelects() {
+  // 填入股票選單
+  const stockList = BUNDLE.stocks || [];
+  ['dqStock','bqStock'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if(!sel) return;
+    sel.innerHTML = '<option value="">— 選擇股票 —</option>';
+    stockList.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.code;
+      opt.textContent = s.code + ' ' + s.name;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// ── 配息快填 ──
+function openDivQuick() {
+  initInvestSelects();
+  const amt  = parseFloat(document.getElementById('qAmt')?.value) || 0;
+  const date = document.getElementById('qDate')?.value || today();
+  document.getElementById('dqAmt').value  = amt || '';
+  document.getElementById('dqDate').value = date;
+  document.getElementById('divQuickModal').classList.add('on');
+}
+function closeDivQuick() {
+  document.getElementById('divQuickModal').classList.remove('on');
+}
+async function submitDivQuick() {
+  const code = document.getElementById('dqStock').value;
+  const amt  = parseFloat(document.getElementById('dqAmt').value) || 0;
+  const date = document.getElementById('dqDate').value;
+  if(!code) { toast('⚠️ 請選擇股票'); return; }
+  if(!amt)  { toast('⚠️ 請填配息金額'); return; }
+
+  // 更新 BUNDLE.stocks 裡的配息記錄
+  const stock = BUNDLE.stocks.find(s => s.code === code);
+  if(stock) {
+    stock.dividends = stock.dividends || [];
+    stock.dividends.push({date, amount: amt});
+    stock.total_dividend = (stock.total_dividend || 0) + amt;
+  }
+  closeDivQuick();
+  toast('✅ 配息已同步到投資頁！');
+  if(curPg === 'invest') renderInvest();
+}
+
+// ── 投資買入快填 ──
+function openBuyQuick() {
+  initInvestSelects();
+  const amt  = parseFloat(document.getElementById('qAmt')?.value) || 0;
+  const date = document.getElementById('qDate')?.value || today();
+  document.getElementById('bqCode').value   = '';
+  document.getElementById('bqName').value   = '';
+  document.getElementById('bqPrice').value  = '';
+  document.getElementById('bqShares').value = '';
+  const costEl = document.getElementById('bqCostShow');
+  if(costEl) costEl.textContent = fmt(amt);
+  document.getElementById('buyQuickModal').classList.add('on');
+}
+function closeBuyQuick() {
+  document.getElementById('buyQuickModal').classList.remove('on');
+}
+function calcBqCost() {
+  const price  = parseFloat(document.getElementById('bqPrice')?.value) || 0;
+  const shares = parseFloat(document.getElementById('bqShares')?.value) || 0;
+  const el = document.getElementById('bqCostShow');
+  if(el) el.textContent = fmt(price * shares);
+}
+async function submitBuyQuick() {
+  const date   = document.getElementById('qDate')?.value || today();
+  const cost   = parseFloat(document.getElementById('qAmt')?.value) || 0;
+  const price  = parseFloat(document.getElementById('bqPrice')?.value) || 0;
+  const shares = parseInt(document.getElementById('bqShares')?.value) || 0;
+
+  // 判斷是選已有股票還是新股票
+  let code = document.getElementById('bqStock')?.value;
+  let name = '';
+  if(!code) {
+    code = (document.getElementById('bqCode')?.value || '').trim();
+    name = (document.getElementById('bqName')?.value || '').trim();
+    if(!code || !name) { toast('⚠️ 請選擇股票或填入代號和名稱'); return; }
+  } else {
+    const existing = BUNDLE.stocks.find(s => s.code === code);
+    name = existing?.name || code;
+  }
+  if(!price || !shares) { toast('⚠️ 請填入價格和股數'); return; }
+
+  const buyRecord = {date, price, shares, amount: price * shares, cost: cost || price * shares};
+
+  // 更新或新增 BUNDLE.stocks
+  let stock = BUNDLE.stocks.find(s => s.code === code);
+  if(stock) {
+    stock.buys = stock.buys || [];
+    stock.buys.push(buyRecord);
+    stock.total_shares  = (stock.total_shares  || 0) + shares;
+    stock.total_cost    = (stock.total_cost    || 0) + (cost || price * shares);
+  } else {
+    const yahoo = code + '.TW';
+    BUNDLE.stocks.push({
+      id: Date.now(), code, name, yahoo,
+      total_shares: shares, total_cost: cost || price * shares,
+      total_dividend: 0, total_refund: 0,
+      buys: [buyRecord], dividends: []
+    });
+  }
+  closeBuyQuick();
+  toast('✅ 買入記錄已同步到投資頁！');
+  if(curPg === 'invest') renderInvest();
 }
 
 // ══ 啟動 ══
