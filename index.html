@@ -2645,4 +2645,48 @@ function renderInvest() {
   const retEl = document.getElementById('inv-ret');
   if(retEl) { retEl.textContent = totalRet ? (totalRet>=0?'+':'')+totalRet.toFixed(1)+'%' : '—'; retEl.style.color = totalRet>=0?'var(--inc)':'var(--exp)'; }
 }
->
+
+// ══ 啟動 ══
+(function init() {
+  // 初始日期
+  const now = new Date();
+  const hdrDate = document.getElementById('hdrDate');
+  if(hdrDate) hdrDate.textContent = now.getFullYear()+'/'+(now.getMonth()+1)+'/'+now.getDate()+' 週'+'日一二三四五六'[now.getDay()];
+
+  // 初始化各頁面需要的 UI
+  ['tDt','skDt','svDt'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today();});
+  if(typeof initSalYrs==='function') initSalYrs();
+  if(typeof buildTCB==='function') buildTCB();
+  if(typeof buildTDF==='function') buildTDF();
+
+  // modal 點背景關閉
+  ['qModal','eModal','rModal','tuiEditModal','batchModal','tuiQuickModal'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('click',function(ev){if(ev.target===el)el.classList.remove('on');});
+  });
+
+  // 先用 Bundle 資料快速渲染
+  if(typeof renderDash==='function') renderDash();
+  if(typeof renderIE==='function') renderIE();
+  if(typeof renderSalWithSearch==='function') renderSalWithSearch();
+  if(typeof renderTui==='function') renderTui();
+
+  // 背景從 GS 載入最新資料（帶 timeout）
+  setSyncStatus('loading','連線中…');
+  Promise.race([
+    loadFromGS(),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000))
+  ]).then(()=>{
+    if(typeof renderDash==='function') renderDash();
+    if(typeof renderIE==='function') renderIE();
+    if(typeof renderSalWithSearch==='function') renderSalWithSearch();
+    if(typeof renderTui==='function') renderTui();
+  }).catch(err=>{
+    console.warn('GS 載入失敗，使用內建資料:', err.message);
+    setSyncStatus('error','離線模式');
+  });
+})();
+
+</script>
+</body>
+</html>
