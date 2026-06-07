@@ -2501,7 +2501,7 @@ let stockPrices = {};  // code -> 即時價格
 
 async function fetchStockPrices() {
   document.getElementById('inv-time').textContent = '更新中…';
-  const stocks = BUNDLE.stocks || [];
+  const stocks = (window.stocks && window.stocks.length) ? window.stocks : (BUNDLE.stocks || []);
 
   // 用 Yahoo Finance query2（瀏覽器可跨域）
   const symbols = stocks.map(s => s.yahoo).join(',');
@@ -2549,12 +2549,15 @@ async function fetchPricesTWSE(stocks) {
 }
 
 function renderInvest() {
-  const stocks = BUNDLE.stocks || [];
-  if(!stocks.length) return;
+  const invData = (typeof stocks !== 'undefined' && stocks.length) ? stocks : (BUNDLE.stocks || []);
+  if(!invData.length) {
+    document.getElementById('inv-list').innerHTML = '<div class="empty">尚無投資記錄</div>';
+    return;
+  }
 
   let totalCost = 0, totalVal = 0, totalDiv = 0;
 
-  const cards = stocks.map(s => {
+  const cards = invData.map(s => {
     const price = stockPrices[s.code];
     const mktVal = price ? price * s.total_shares : null;
     const pnl    = mktVal ? mktVal - s.total_cost : null;
@@ -2566,129 +2569,80 @@ function renderInvest() {
     if(mktVal) totalVal += mktVal;
     totalDiv  += s.total_dividend;
 
-    const pnlColor = pnl >= 0 ? 'var(--inc)' : 'var(--exp)';
+    const pnlColor = !pnl ? 'var(--muted)' : pnl >= 0 ? 'var(--inc)' : 'var(--exp)';
     const pnlSign  = pnl >= 0 ? '+' : '';
 
-    // 最近3筆配息
     const recentDivs = (s.dividends || [])
-      .sort((a,b) => b.date.localeCompare(a.date))
-      .slice(0,3)
-      .map(d => `<span style="font-size:10px;color:var(--muted)">${d.date.slice(0,7)} +${fmt(d.amount)}</span>`)
+      .sort((a,b) => b.date.localeCompare(a.date)).slice(0,3)
+      .map(d => '<span style="font-size:10px;color:var(--muted)">'+d.date.slice(0,7)+' +'+fmt(d.amount)+'</span>')
       .join('  ');
 
-    return `<div class="card" style="margin-bottom:10px">
-      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:15px">${s.code} ${s.name}</div>
-          <div style="font-size:11px;color:var(--muted)">持股 ${s.total_shares.toLocaleString()} 股</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:11px;color:var(--muted)">即時價格</div>
-          <div style="font-family:'DM Mono';font-size:18px;font-weight:700;color:var(--ink)">
-            ${price ? '$'+price.toFixed(2) : '—'}
-          </div>
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px">
-        <div style="background:var(--cream);border-radius:8px;padding:7px;text-align:center">
-          <div style="font-size:9px;color:var(--muted)">持有成本</div>
-          <div style="font-family:'DM Mono';font-size:12px;font-weight:600;color:var(--exp)">${fmt(s.total_cost)}</div>
-        </div>
-        <div style="background:var(--cream);border-radius:8px;padding:7px;text-align:center">
-          <div style="font-size:9px;color:var(--muted)">市值</div>
-          <div style="font-family:'DM Mono';font-size:12px;font-weight:600;color:var(--sky)">${mktVal ? fmt(mktVal) : '—'}</div>
-        </div>
-        <div style="background:var(--cream);border-radius:8px;padding:7px;text-align:center">
-          <div style="font-size:9px;color:var(--muted)">未實現損益</div>
-          <div style="font-family:'DM Mono';font-size:12px;font-weight:600;color:${pnlColor}">
-            ${pnl !== null ? pnlSign+fmt(pnl) : '—'}
-          </div>
-          <div style="font-size:9px;color:${pnlColor}">${pnlPct !== null ? pnlSign+pnlPct.toFixed(1)+'%' : ''}</div>
-        </div>
-        <div style="background:var(--cream);border-radius:8px;padding:7px;text-align:center">
-          <div style="font-size:9px;color:var(--muted)">總配息</div>
-          <div style="font-family:'DM Mono';font-size:12px;font-weight:600;color:var(--inc)">${fmt(s.total_dividend)}</div>
-          <div style="font-size:9px;color:var(--muted)">${divYield.toFixed(1)}%</div>
-        </div>
-      </div>
-
-      ${totalReturn !== null ? `<div style="background:var(--cream);border-radius:8px;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:11px;color:var(--muted)">含息總報酬</span>
-        <span style="font-family:'DM Mono';font-size:13px;font-weight:700;color:${totalReturn>=0?'var(--inc)':'var(--exp)'}">${totalReturn>=0?'+':''}${totalReturn.toFixed(1)}%</span>
-      </div>` : ''}
-
-      ${recentDivs ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">最近配息：${recentDivs}</div>` : ''}
-
-      <details style="margin-top:8px">
-        <summary style="font-size:11px;color:var(--sky);cursor:pointer">查看買入記錄</summary>
-        <div style="margin-top:6px">
-          ${(s.buys||[]).map(b => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--cream);font-size:11px">
-            <span>${b.date} @$${b.price} × ${b.shares}股</span>
-            <span style="color:var(--muted)">${fmt(b.cost)}</span>
-          </div>`).join('')}
-        </div>
-      </details>
-    </div>`;
+    return '<div class="card" style="margin-bottom:10px">'+
+      '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">'+
+        '<div style="flex:1">'+
+          '<div style="font-weight:700;font-size:15px">'+s.code+' '+s.name+'</div>'+
+          '<div style="font-size:11px;color:var(--muted)">持股 '+s.total_shares.toLocaleString()+' 股</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="font-size:11px;color:var(--muted)">即時價格</div>'+
+          '<div style="font-family:DM Mono,monospace;font-size:18px;font-weight:700;color:var(--ink)">'+
+            (price ? '$'+price.toFixed(2) : '—')+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px">'+
+        '<div style="background:var(--cream);border-radius:8px;padding:7px;text-align:center">'+
+          '<div style="font-size:9px;color:var(--muted)">持有成本</div>'+
+          '<div style="font-family:DM Mono,monospace;font-size:12px;font-weight:600;color:var(--exp)">'+fmt(s.total_cost)+'</div>'+
+        '</div>'+
+        '<div style="background:var(--cream);border-radius:8px;padding:7px;text-align:center">'+
+          '<div style="font-size:9px;color:var(--muted)">市值</div>'+
+          '<div style="font-family:DM Mono,monospace;font-size:12px;font-weight:600;color:var(--sky)">'+(mktVal ? fmt(mktVal) : '—')+'</div>'+
+        '</div>'+
+        '<div style="background:var(--cream);border-radius:8px;padding:7px;text-align:center">'+
+          '<div style="font-size:9px;color:var(--muted)">未實現損益</div>'+
+          '<div style="font-family:DM Mono,monospace;font-size:12px;font-weight:600;color:'+pnlColor+'">'+
+            (pnl !== null ? pnlSign+fmt(pnl) : '—')+
+          '</div>'+
+          '<div style="font-size:9px;color:'+pnlColor+'">'+(pnlPct !== null ? pnlSign+pnlPct.toFixed(1)+'%' : '')+'</div>'+
+        '</div>'+
+        '<div style="background:var(--cream);border-radius:8px;padding:7px;text-align:center">'+
+          '<div style="font-size:9px;color:var(--muted)">總配息</div>'+
+          '<div style="font-family:DM Mono,monospace;font-size:12px;font-weight:600;color:var(--inc)">'+fmt(s.total_dividend)+'</div>'+
+          '<div style="font-size:9px;color:var(--muted)">'+divYield.toFixed(1)+'%</div>'+
+        '</div>'+
+      '</div>'+
+      (totalReturn !== null ? '<div style="background:var(--cream);border-radius:8px;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+        '<span style="font-size:11px;color:var(--muted)">含息總報酬</span>'+
+        '<span style="font-family:DM Mono,monospace;font-size:13px;font-weight:700;color:'+(totalReturn>=0?'var(--inc)':'var(--exp)')+'">'+
+          (totalReturn>=0?'+':'')+totalReturn.toFixed(1)+'%'+
+        '</span>'+
+      '</div>' : '')+
+      (recentDivs ? '<div style="font-size:10px;color:var(--muted);margin-top:4px">最近配息：'+recentDivs+'</div>' : '')+
+      '<details style="margin-top:8px">'+
+        '<summary style="font-size:11px;color:var(--sky);cursor:pointer">查看買入記錄</summary>'+
+        '<div style="margin-top:6px">'+
+          (s.buys||[]).map(b =>
+            '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--cream);font-size:11px">'+
+              '<span>'+b.date+' @$'+b.price+' × '+b.shares+'股</span>'+
+              '<span style="color:var(--muted)">'+fmt(b.cost)+'</span>'+
+            '</div>'
+          ).join('')+
+        '</div>'+
+      '</details>'+
+    '</div>';
   });
 
   document.getElementById('inv-list').innerHTML = cards.join('');
 
-  // 更新總覽
   const totalPnl = totalVal - totalCost;
   const totalRet = totalVal ? ((totalVal + totalDiv - totalCost) / totalCost * 100) : null;
   document.getElementById('inv-cost').textContent = fmt(totalCost);
   document.getElementById('inv-val').textContent  = totalVal ? fmt(totalVal) : '—';
   document.getElementById('inv-div').textContent  = fmt(totalDiv);
   const pnlEl = document.getElementById('inv-pnl');
-  pnlEl.textContent = totalVal ? (totalPnl>=0?'+':'')+fmt(totalPnl) : '—';
-  pnlEl.style.color = totalPnl>=0 ? 'var(--inc)' : 'var(--exp)';
+  if(pnlEl) { pnlEl.textContent = totalVal ? (totalPnl>=0?'+':'')+fmt(totalPnl) : '—'; pnlEl.style.color = totalPnl>=0?'var(--inc)':'var(--exp)'; }
   const retEl = document.getElementById('inv-ret');
-  retEl.textContent = totalRet ? (totalRet>=0?'+':'')+totalRet.toFixed(1)+'%' : '—';
-  retEl.style.color = totalRet>=0 ? 'var(--inc)' : 'var(--exp)';
+  if(retEl) { retEl.textContent = totalRet ? (totalRet>=0?'+':'')+totalRet.toFixed(1)+'%' : '—'; retEl.style.color = totalRet>=0?'var(--inc)':'var(--exp)'; }
 }
-
-// ══ INIT ══
-async function manualSync() {
-  setSyncUI('syncing','同步中…');
-  const ok = await loadFromCloud();
-  if(ok) {
-    renderDash();
-    if(curPg==='ie') renderIE();
-    if(curPg==='salary') renderSal();
-    if(curPg==='kids') renderKids();
-    if(curPg==='assets') renderAssets();
-    await retryPending();
-  }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const now = new Date();
-  document.getElementById('hdrDate').textContent = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} 週${'日一二三四五六'[now.getDay()]}`;
-  ['tDt','skDt','svDt'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today()});
-  initSalYrs(); initHBYrs(); buildSvI();
-  cTC='kinder'; buildTCB(); buildTDF();
-  ['qModal','eModal','rModal'].forEach(id=>{const el=document.getElementById(id);el?.addEventListener('click',e=>{if(e.target===el)el.classList.remove('on')})});
-
-  // 立刻渲染內建資料
-  renderDash(); renderIE(); renderSal(); renderTui(); renderHB(); renderSk(); renderSav();
-
-  // 背景連線 GS（不阻塞頁面）
-  setTimeout(async () => {
-    try {
-      const ok = await Promise.race([
-        loadFromGS(),
-        new Promise(resolve => setTimeout(() => resolve(false), 8000))
-      ]);
-      if(ok) {
-        renderDash(); renderIE();
-        setSyncStatus('ok', '已同步');
-      }
-    } catch(e) {
-      setSyncStatus('error', '離線模式');
-    }
-  }, 500);
-});
-</script>
-</body>
-</html>
+>
