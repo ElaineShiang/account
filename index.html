@@ -1372,7 +1372,7 @@ function go(id, btn) {
   document.getElementById('pg-'+id).classList.add('on');
   document.getElementById('bn-'+id).classList.add('on');
   curPg = id;
-  ({dash:renderDash,ie:renderIE,analysis:renderAna,salary:renderSal,kids:renderKids,assets:renderAssets})[id]?.();
+  ({dash:renderDash,ie:renderIE,analysis:renderAna,salary:renderSal,kids:renderKids,invest:renderInvest,assets:renderAssets})[id]?.();
 }
 
 function renderAll() {
@@ -2549,7 +2549,8 @@ async function fetchPricesTWSE(stocks) {
 }
 
 function renderInvest() {
-  const invData = (typeof stocks !== 'undefined' && stocks.length) ? stocks : (BUNDLE.stocks || []);
+  // 投資頁永遠用 Bundle 的彙整資料（GS 存的是舊格式流水帳）
+  const invData = BUNDLE.stocks || [];
   if(!invData.length) {
     document.getElementById('inv-list').innerHTML = '<div class="empty">尚無投資記錄</div>';
     return;
