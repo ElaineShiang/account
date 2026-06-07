@@ -1513,7 +1513,8 @@ async function saveE() {
     amount: parseFloat(document.getElementById('eAmt').value)||0,
     type: eT, cat: document.getElementById('eCat').value,
     note: document.getElementById('eNote').value.trim(),
-    payment: document.getElementById('ePay').value
+    payment: document.getElementById('ePay').value,
+    isBiz: document.getElementById('eBiz')?.checked || false
   };
   const idx = records.findIndex(r=>r.id===id);
   if(idx>=0) records[idx] = {...records[idx],...ch};
