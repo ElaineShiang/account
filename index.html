@@ -781,6 +781,38 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   </div>
 </div>
 
+<!-- 補助快填 Modal -->
+<div class="modal-bg" id="subsidyQuickModal">
+  <div class="modal">
+    <div class="modal-ttl">🏛 學費補助記錄
+      <button class="modal-x" onclick="closeSubsidyQuick()">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+      將自動更新同月學費記錄的補助欄位，實付金額自動重算
+    </div>
+    <div class="fr">
+      <label class="fl">孩子</label>
+      <div style="display:flex;gap:8px">
+        <button id="sqNora" onclick="setSqChild('nora')"
+          style="flex:1;padding:9px;border-radius:9px;border:2px solid var(--border);background:var(--paper);color:var(--muted);font-family:'Noto Serif TC',serif;font-size:14px;cursor:pointer;font-weight:600">
+          🌸 Nora
+        </button>
+        <button id="sqDennis" onclick="setSqChild('dennis')"
+          style="flex:1;padding:9px;border-radius:9px;border:2px solid var(--sage);background:var(--sage);color:#fff;font-family:'Noto Serif TC',serif;font-size:14px;cursor:pointer;font-weight:600">
+          🌿 Dennis
+        </button>
+      </div>
+    </div>
+    <div id="sqMatchInfo" style="background:var(--cream);border-radius:9px;padding:10px 13px;margin-bottom:10px;font-size:12px">
+      — 選擇孩子後顯示同月學費記錄 —
+    </div>
+    <div class="fr2">
+      <button class="sbtn sec" onclick="closeSubsidyQuick()">略過，只記收入</button>
+      <button class="sbtn" onclick="submitSubsidyQuick()">更新學費補助</button>
+    </div>
+  </div>
+</div>
+
 <!-- 學費快填 Modal -->
 <div class="modal-bg" id="tuiQuickModal">
   <div class="modal">
@@ -2135,6 +2167,7 @@ function onQCatChange(val){
   else if(val==='薪資入帳') setTimeout(()=>openSalQuick(),100);
   else if(val==='配息') setTimeout(()=>openDivQuick(),100);
   else if(val==='投資買入') setTimeout(()=>openBuyQuick(),100);
+  else if(val==='補助款') setTimeout(()=>openSubsidyQuick(),100);
 }
 function openTuiQuick(){
   tqAmount=parseFloat(document.getElementById('qAmt')?.value)||0;
@@ -2838,6 +2871,81 @@ async function submitBuyQuick() {
   closeBuyQuick();
   toast('✅ 買入記錄已同步到投資頁！');
   if(curPg === 'invest') renderInvest();
+}
+
+// ══ 學費補助快填 ══
+let sqChild = 'dennis';
+let sqDate  = '';
+let sqAmt   = 0;
+
+function openSubsidyQuick() {
+  sqAmt  = parseFloat(document.getElementById('qAmt')?.value) || 0;
+  sqDate = document.getElementById('qDate')?.value || today();
+  sqChild = 'dennis';
+  setSqChild('dennis');
+  document.getElementById('subsidyQuickModal').classList.add('on');
+}
+function closeSubsidyQuick() {
+  document.getElementById('subsidyQuickModal').classList.remove('on');
+}
+
+function setSqChild(child) {
+  sqChild = child;
+  const nb=document.getElementById('sqNora'), db=document.getElementById('sqDennis');
+  const on='flex:1;padding:9px;border-radius:9px;font-family:inherit;font-size:14px;cursor:pointer;font-weight:600;border:2px solid ';
+  nb.style.cssText=on+(child==='nora'?'var(--rust);background:var(--rust);color:#fff':'var(--border);background:var(--paper);color:var(--muted)');
+  db.style.cssText=on+(child==='dennis'?'var(--sage);background:var(--sage);color:#fff':'var(--border);background:var(--paper);color:var(--muted)');
+  updateSqMatchInfo();
+}
+
+function updateSqMatchInfo() {
+  const el = document.getElementById('sqMatchInfo');
+  if(!el) return;
+  const [yr, mo] = sqDate.split('-').map(Number);
+  const list = sqChild==='nora' ? tuitionN : tuitionD;
+  // 找同月的學費記錄
+  const matches = list.filter(t => {
+    const [ty, tm] = t.date.split('-').map(Number);
+    return ty===yr && tm===mo;
+  });
+  if(!matches.length) {
+    el.innerHTML = '<span style="color:var(--exp)">⚠ '+yr+'/'+mo+' 找不到對應的學費記錄</span>';
+    return;
+  }
+  const childName = sqChild==='nora'?'Nora':'Dennis';
+  el.innerHTML = matches.map(t =>
+    '<div style="margin-bottom:4px">'+
+    '📋 '+t.date+' '+t.school+
+    '<br>繳費 '+fmt(t.total)+
+    ' → 補助更新為 <b style="color:var(--inc)">'+fmt(sqAmt)+'</b>'+
+    ' → 實付 <b style="color:var(--exp)">'+fmt(Math.max(0,t.total-sqAmt))+'</b>'+
+    '</div>'
+  ).join('');
+}
+
+async function submitSubsidyQuick() {
+  const [yr, mo] = sqDate.split('-').map(Number);
+  const list = sqChild==='nora' ? tuitionN : tuitionD;
+  const matches = list.filter(t => {
+    const [ty, tm] = t.date.split('-').map(Number);
+    return ty===yr && tm===mo;
+  });
+  if(!matches.length) { toast('⚠ 找不到同月學費記錄'); return; }
+
+  const sheetKey = sqChild==='nora' ? 'tuitionN' : 'tuitionD';
+  let updated = 0;
+  for(const t of matches) {
+    t.subsidy = sqAmt;
+    t.actual  = Math.max(0, t.total - sqAmt);
+    // 同步到 GS
+    setSyncUI('syncing','同步中…');
+    await updateInGS(sheetKey, t.id, {subsidy: sqAmt, actual: t.actual});
+    updated++;
+  }
+
+  closeSubsidyQuick();
+  renderTui();
+  toast('✅ 已更新 '+updated+' 筆學費補助，實付重算完成！');
 }
 
 // ══ 啟動 ══
