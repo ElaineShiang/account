@@ -2621,7 +2621,10 @@ function openEditSal(id) {
   }
   if(cancelBtn) cancelBtn.style.display='block';
   // 捲到薪資新增表單
-  document.getElementById('pg-salary').scrollTo({top:0,behavior:'smooth'});
+  try {
+    const pgEl = document.getElementById('pg-salary');
+    if(pgEl){ if(typeof pgEl.scrollTo==='function') pgEl.scrollTo({top:0,behavior:'smooth'}); else pgEl.scrollTop=0; }
+  } catch(e){ console.warn('捲動失敗（不影響編輯功能）:', e.message); }
   toast('📋 已載入薪資資料，修改後按「更新薪資」（此為就地更新，不會產生新的一筆）');
 }
 
