@@ -1063,8 +1063,23 @@ const SAL_STRUCTS = BUNDLE.salStructures;
 const BANKS = ['台灣銀行','中國信託','玉山銀行','中華郵政','元大銀行'];
 
 // ══ 資料狀態 ══
+// 薪資明細欄位正規化：雲端 (Google Sheets/GAS) 回傳的欄位叫 items_json，
+// 但前端一律用 s.items 讀取，兩者對不上會讓 items 變成 undefined
+// （編輯功能會直接噴例外、明細標籤也會顯示不出來）。這裡統一轉換。
+function normSalaries(arr){
+  return (arr||[]).map(s=>{
+    let items = s.items;
+    if(!Array.isArray(items)){
+      const raw = s.items_json;
+      if(Array.isArray(raw)) items = raw;
+      else if(typeof raw==='string' && raw.trim()) { try{ items = JSON.parse(raw); }catch(e){ items = []; } }
+      else items = [];
+    }
+    return {...s, items};
+  });
+}
 let records  = BUNDLE.records  || [];
-let salaries = BUNDLE.salaries || [];
+let salaries = normSalaries(BUNDLE.salaries || []);
 let tuitionN = BUNDLE.tuitionN || [];
 let tuitionD = BUNDLE.tuitionD || [];
 let hongbaoN = BUNDLE.hbN || [];
@@ -1114,7 +1129,7 @@ async function loadFromCloud() {
       ...B.records.filter(r=>!cloudIds.has(String(r.id)))
     ].sort((a,b)=>b.date.localeCompare(a.date));
 
-    if(d.salary?.length)   salaries = d.salary;
+    if(d.salary?.length)   salaries = normSalaries(d.salary);
     if(d.tuitionN?.length) tuitionN = d.tuitionN;
     if(d.tuitionD?.length) tuitionD = d.tuitionD;
     if(d.hbN?.length)      hongbaoN = d.hbN;
@@ -1320,7 +1335,7 @@ function importBackup(event) {
       if(!data.records) throw new Error('格式不正確');
       if(!confirm('確認還原備份？現有資料將被覆蓋。\n備份時間：' + (data.exportTime||'未知'))) return;
       records   = data.records  || records;
-      salaries  = data.salaries || salaries;
+      salaries  = normSalaries(data.salaries || salaries);
       tuitionN  = data.tuitionN || tuitionN;
       tuitionD  = data.tuitionD || tuitionD;
       stocks    = data.stocks   || stocks;
@@ -1391,7 +1406,7 @@ async function loadFromGS() {
 
     const d = result.data;
     if(d.records  && d.records.length)  records  = fixRecordDates(d.records).sort((a,b)=>b.date.localeCompare(a.date));
-    if(d.salary   && d.salary.length)   salaries = d.salary;
+    if(d.salary   && d.salary.length)   salaries = normSalaries(d.salary);
     if(d.tuitionN && d.tuitionN.length) tuitionN = fixTuitionCats(fixRecordDates(d.tuitionN));
     if(d.tuitionD && d.tuitionD.length) tuitionD = fixTuitionCats(fixRecordDates(d.tuitionD));
     if(d.hbN      && d.hbN.length)      hongbaoN = d.hbN;
