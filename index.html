@@ -1881,16 +1881,35 @@ function toggleSalItem(key) {
 function calcS(){const v=id=>parseFloat(document.getElementById(id)?.value)||0;const el=document.getElementById('sCalc');if(el)el.textContent=fmt(v('sB')+v('sBn')+v('sOT')+v('sMl')+v('sRe')+v('sFA')+v('sTravel')+v('sOverseas')+v('sDomestic')+v('sOth'));}
 async function addSal(){
   const v=id=>parseFloat(document.getElementById(id)?.value)||0;
-  const total=v('sB')+v('sBn')+v('sOT')+v('sMl')+v('sRe')+v('sFA')+v('sOth');
-  if(!total){toast('⚠️ 請填金額');return}
   const items=[];
   const fmap={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sFA:'全勤'};
   Object.entries(fmap).forEach(([id,l])=>{const vv=v(id);if(vv)items.push({label:l,amount:vv})});
   const ov=v('sOth'),on=(document.getElementById('sNote')?.value||'').trim();
   if(ov)items.push({label:on||'其他',amount:ov});
-  const s={id:Date.now(),year:+document.getElementById('salYr').value,month:+document.getElementById('salMo').value,total,items};
+  // 總額一律用「各項目加總」計算，避免漏算任何項目（例如差旅補助／國外出差／國內出差）
+  const total = items.reduce((a,it)=>a+it.amount, 0);
+  if(!total){toast('⚠️ 請填金額');return}
+  const year=+document.getElementById('salYr').value, month=+document.getElementById('salMo').value;
+
+  if(editSalId){
+    // ── 編輯既有記錄：就地更新，不新增第二筆 ──
+    const idx = salaries.findIndex(x=>x.id===editSalId);
+    if(idx>=0){
+      salaries[idx] = {...salaries[idx], year, month, total, items};
+      setLS('sn', salaries.filter(x=>x.id>9e6));
+      await updateInGS('salary', editSalId, {year, month, total, items_json: JSON.stringify(items)});
+    }
+    editSalId = null;
+    const btn=document.querySelector('#pg-salary .sbtn'); if(btn) btn.textContent='儲存薪資';
+    renderSalWithSearch();
+    toast('✓ 薪資已更新（若金額有大變動，請自行檢查對應的收支記錄是否也需要修改）');
+    return;
+  }
+
+  // ── 新增一筆 ──
+  const s={id:Date.now(),year,month,total,items};
   salaries.unshift(s);
-  renderSal(); toast('✓ 薪資已儲存');
+  renderSalWithSearch(); toast('✓ 薪資已儲存');
   await pushToGS('salary', {...s, items_json: JSON.stringify(s.items)});
 
   // 自動同步一筆薪資入帳到收支記錄
@@ -1913,6 +1932,21 @@ async function addSal(){
   await pushToGS('records', salRec);
   toast('✓ 薪資已儲存，並同步至收支（' + salDate + '）');
 }
+function cancelEditSal(){
+  editSalId = null;
+  const btn=document.querySelector('#pg-salary .sbtn'); if(btn) btn.textContent='儲存薪資';
+  const cancelBtn=document.getElementById('salCancelBtn'); if(cancelBtn) cancelBtn.style.display='none';
+  ['sB','sBn','sOT','sMl','sTravel','sRe','sOverseas','sDomestic','sFA','sOth','sNote'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  calcS();
+}
+function toggleSalDetail(id){
+  const el=document.getElementById('sal-detail-'+id);
+  const arrow=document.getElementById('sal-arrow-'+id);
+  if(!el) return;
+  const open = el.style.display==='flex';
+  el.style.display = open ? 'none' : 'flex';
+  if(arrow) arrow.textContent = open ? '▸' : '▾';
+}
 function renderSalStruct(){
   const ss=SAL_STRUCTS;
   const rows=['薪資','勞保費','健保費','薪資小計','節金','全勤','總計'];
@@ -1925,17 +1959,7 @@ function renderSalStruct(){
 }
 function renderSal(){
   renderSalStruct();
-  const el=document.getElementById('salYV');
-  if(!salaries.length){el.innerHTML='<div class="empty">尚無記錄</div>';return}
-  const bY={};salaries.forEach(s=>{if(!bY[s.year])bY[s.year]=[];bY[s.year].push(s)});
-  el.innerHTML=Object.keys(bY).sort((a,b)=>b-a).map(y=>{
-    const its=bY[y],yt=its.reduce((a,b)=>a+b.total,0);
-    return`<div class="card"><div class="yr-sum"><b>${y}年</b> 年薪 <b>${fmt(yt)}</b></div>
-      ${its.map(s=>`<div class="salc"><div class="fb" style="margin-bottom:6px"><span style="font-weight:600;font-size:13px">${s.year}/${String(s.month).padStart(2,'0')}</span><span style="font-family:'DM Mono';font-size:13px;color:var(--inc)">${fmt(s.total)}</span></div>
-        <div style="display:flex;flex-wrap:wrap;gap:3px">${(Array.isArray(s.items)?s.items:[]).map(it=>{const hi=['薪資','節金','全勤','代墊','出差','差旅','午餐','晚餐','國外'].some(k=>it.label.includes(k));const lo=['勞保','健保'].some(k=>it.label.includes(k));return`<span class="stag ${hi?'hi':lo?'lo':''}">${it.label} ${fmt(it.amount)}</span>`}).join('')}</div>
-      </div>`).join('')}
-    </div>`;
-  }).join('');
+  renderSalWithSearch();
 }
 
 // ══ 學費 ══
@@ -2542,15 +2566,15 @@ function renderSalWithSearch() {
     const its=bY[y], yt=its.reduce((a,b)=>a+b.total,0);
     return`<div class="card"><div class="yr-sum"><b>${y}年</b> 年薪 <b>${fmt(yt)}</b></div>
       ${its.map(s=>`<div class="salc">
-        <div class="fb" style="margin-bottom:6px">
-          <span style="font-weight:600;font-size:13px">${s.year}/${String(s.month).padStart(2,'0')}</span>
+        <div class="fb" style="margin-bottom:6px;cursor:pointer" onclick="toggleSalDetail(${s.id})">
+          <span style="font-weight:600;font-size:13px"><span id="sal-arrow-${s.id}" style="display:inline-block;width:12px;color:var(--muted)">▸</span>${s.year}/${String(s.month).padStart(2,'0')}</span>
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-family:'DM Mono';font-size:13px;color:var(--inc)">${fmt(s.total)}</span>
-            <button onclick="openEditSal(${s.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:var(--paper);color:var(--sky);cursor:pointer">✏️</button>
-            <button onclick="delSal(${s.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:var(--paper);color:var(--exp);cursor:pointer">✕</button>
+            <button onclick="event.stopPropagation();openEditSal(${s.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:var(--paper);color:var(--sky);cursor:pointer">✏️</button>
+            <button onclick="event.stopPropagation();delSal(${s.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:var(--paper);color:var(--exp);cursor:pointer">✕</button>
           </div>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:3px">
+        <div id="sal-detail-${s.id}" style="display:none;flex-wrap:wrap;gap:3px">
           ${s.items.map(it=>{const hi=['薪資','節金','全勤','代墊','出差','差旅','午餐','晚餐','國外'].some(k=>it.label.includes(k));const lo=['勞保','健保'].some(k=>it.label.includes(k));return`<span class="stag ${hi?'hi':lo?'lo':''}">${it.label} ${fmt(it.amount)}</span>`}).join('')}
         </div>
       </div>`).join('')}
@@ -2567,19 +2591,38 @@ function openEditSal(id) {
   const yr=document.getElementById('salYr'), mo=document.getElementById('salMo');
   if(yr) yr.value=s.year;
   if(mo) mo.value=s.month;
-  // 填各項明細
-  const map={sB:'薪資',sBn:'節金',sOT:'加班/門禁',sMl:'餐費',sRe:'代墊',sFA:'全勤'};
+  // 填各項明細（label 需與 addSal() 的 fmap 完全一致，否則門禁/午餐/差旅補助/國外出差/國內出差會被漏掉）
+  const map={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sFA:'全勤'};
+  const ckMap={sB:'ck_sal',sBn:'ck_bonus',sOT:'ck_gate',sMl:'ck_lunch',sTravel:'ck_travel',sRe:'ck_advance',sOverseas:'ck_overseas',sDomestic:'ck_domestic',sFA:'ck_fa'};
   Object.entries(map).forEach(([id2,l])=>{
     const el=document.getElementById(id2); if(!el)return;
-    const item=s.items.find(it=>it.label===l); el.value=item?item.amount:'';
+    const item=s.items.find(it=>it.label===l);
+    el.value=item?item.amount:'';
+    const ck=document.getElementById(ckMap[id2]);
+    if(ck){ ck.checked = !!item; toggleSalItem(ckMap[id2].slice(3)); }
   });
   const otherItem=s.items.find(it=>!Object.values(map).includes(it.label));
+  const ckOther=document.getElementById('ck_other');
+  if(ckOther){ ckOther.checked = !!otherItem; toggleSalItem('other'); }
   const snEl=document.getElementById('sNote'); if(snEl) snEl.value=otherItem?otherItem.label:'';
   const soEl=document.getElementById('sOth');  if(soEl) soEl.value=otherItem?otherItem.amount:'';
   calcS();
+  // 切換成「更新」模式
+  const btn=document.querySelector('#pg-salary .sbtn'); if(btn) btn.textContent='💾 更新薪資（'+s.year+'/'+String(s.month).padStart(2,'0')+'）';
+  let cancelBtn=document.getElementById('salCancelBtn');
+  if(!cancelBtn && btn){
+    cancelBtn=document.createElement('button');
+    cancelBtn.id='salCancelBtn';
+    cancelBtn.className='sbtn';
+    cancelBtn.style.cssText='margin-top:6px;background:var(--paper);color:var(--muted);border:1px solid var(--border)';
+    cancelBtn.textContent='取消編輯';
+    cancelBtn.onclick=cancelEditSal;
+    btn.insertAdjacentElement('afterend', cancelBtn);
+  }
+  if(cancelBtn) cancelBtn.style.display='block';
   // 捲到薪資新增表單
   document.getElementById('pg-salary').scrollTo({top:0,behavior:'smooth'});
-  toast('📋 已載入薪資資料，修改後按儲存');
+  toast('📋 已載入薪資資料，修改後按「更新薪資」（此為就地更新，不會產生新的一筆）');
 }
 
 async function delSal(id) {
