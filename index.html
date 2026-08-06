@@ -2198,7 +2198,7 @@ function renderSav(){
   document.getElementById('svHist').innerHTML=savingsH.map(s=>`<div class="sh"><span style="font-family:'DM Mono';font-size:10px">${s.date}</span><span style="font-family:'DM Mono';font-weight:600">${fmt(s.total)}</span></div>`).join('');
   if(document.getElementById('bkDetail').style.display!=='none') renderBkDetail();
 }
-function renderAssets(){renderSav();if(aSub==='stk')renderSk()}
+function renderAssets(){buildSvI();renderSav();if(aSub==='stk')renderSk()}
 
 // 成長軌跡：曲線圖 (SVG, Catmull-Rom 平滑曲線)
 function renderGrowthChart(sl){
