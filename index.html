@@ -465,7 +465,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <div class="fb"><b style="font-size:13px">合計</b>
         <span id="bkTot" style="font-family:'DM Mono';font-size:15px;font-weight:700">$0</span></div>
     </div>
-    <div class="card"><div class="ct">＋ 更新快照</div>
+    <div class="card"><div class="ct fb" style="flex-direction:row;gap:0"><span>＋ 更新快照</span>
+        <button onclick="fillLastSav()" style="font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--paper);cursor:pointer;margin-left:auto">↩ 帶入上次金額</button></div>
       <div class="fr"><label class="fl">日期</label><input class="fi" type="date" id="svDt"></div>
       <div id="svInputs"></div>
       <button class="sbtn" onclick="saveSav()">儲存快照</button>
@@ -2156,6 +2157,12 @@ function renderHB(){
 let aSub='sav';
 function swASub(s,btn){aSub=s;document.querySelectorAll('#aSubTab .chip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');document.getElementById('aSav').style.display=s==='sav'?'block':'none';document.getElementById('aStk').style.display=s==='stk'?'block':'none'}
 function buildSvI(){document.getElementById('svInputs').innerHTML=BANKS.map(b=>`<div class="fr"><label class="fl">${b}</label><input class="fi" type="number" id="sv_${b}" placeholder="0" inputmode="numeric"></div>`).join('')}
+function fillLastSav(){
+  if(!savingsH.length){toast('⚠️ 尚無歷史快照可帶入');return}
+  const bk=savingsH[0].banks||{};
+  BANKS.forEach(b=>{const el=document.getElementById('sv_'+b);if(el)el.value=bk[b]||''});
+  toast('✓ 已帶入上次金額，記得確認/修改');
+}
 async function saveSav(){
   const dt=document.getElementById('svDt').value||today();
   const banks={};let tot=0;
@@ -2168,10 +2175,15 @@ async function saveSav(){
 }
 function renderSav(){
   const lat=savingsH[0],bk=lat?lat.banks:{},tot=lat?lat.total:0;
+  const prevBk=savingsH[1]?savingsH[1].banks:null;
   document.getElementById('savTot').textContent=fmt(tot);
   document.getElementById('bkTot').textContent=fmt(tot);
   const mx=Math.max(...BANKS.map(b=>bk[b]||0),1);
-  document.getElementById('bkList').innerHTML=BANKS.map(b=>`<div class="savr"><div style="flex:1"><div style="font-size:13px">${b}</div><div class="bbar"><div class="bbar-f" style="width:${Math.round(((bk[b]||0)/mx)*100)}%"></div></div></div><div style="font-family:'DM Mono';font-size:13px;margin-left:10px">${fmt(bk[b]||0)}</div></div>`).join('');
+  document.getElementById('bkList').innerHTML=BANKS.map(b=>{
+    const diff=prevBk?(bk[b]||0)-(prevBk[b]||0):null;
+    const diffHtml=diff!==null?`<div style="font-size:10px;font-family:'DM Mono';color:${diff>=0?'var(--inc)':'var(--exp)'}">${diff>=0?'+':''}${fmt(diff)}</div>`:'';
+    return `<div class="savr"><div style="flex:1"><div style="font-size:13px">${b}</div><div class="bbar"><div class="bbar-f" style="width:${Math.round(((bk[b]||0)/mx)*100)}%"></div></div></div><div style="text-align:right;margin-left:10px"><div style="font-family:'DM Mono';font-size:13px">${fmt(bk[b]||0)}</div>${diffHtml}</div></div>`;
+  }).join('');
   const sl=[...savingsH].reverse(),maxS=Math.max(...sl.map(s=>s.total),1);
   document.getElementById('savGrowth').innerHTML=sl.map((s,i)=>{const prev=sl[i-1],diff=prev?s.total-prev.total:null;return`<div class="nw-row"><div style="font-size:10px;color:var(--muted);font-family:'DM Mono';flex-shrink:0">${s.date}</div><div style="flex:1;padding:0 8px"><div class="bbar"><div class="bbar-f" style="width:${Math.round(s.total/maxS*100)}%"></div></div></div><div style="text-align:right;flex-shrink:0"><div style="font-family:'DM Mono';font-size:11px;font-weight:600;color:var(--sky)">${fmt(s.total)}</div>${diff!==null?`<div style="font-size:10px;font-family:'DM Mono';color:${diff>=0?'var(--inc)':'var(--exp)'}">${diff>=0?'+':''}${fmt(diff)}</div>`:''}</div></div>`;}).join('');
   document.getElementById('svHist').innerHTML=savingsH.map(s=>`<div class="sh"><span style="font-family:'DM Mono';font-size:10px">${s.date}</span><span style="font-family:'DM Mono';font-weight:600">${fmt(s.total)}</span></div>`).join('');
