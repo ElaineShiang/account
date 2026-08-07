@@ -470,11 +470,12 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <span id="bkTot" style="font-family:'DM Mono';font-size:15px;font-weight:700">$0</span></div>
       <div id="bkDetail" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)"></div>
     </div>
-    <div class="card"><div class="ct fb" style="flex-direction:row;gap:0"><span>＋ 更新快照</span>
+    <div class="card" id="svFormCard"><div class="ct fb" style="flex-direction:row;gap:0"><span>＋ 更新快照</span>
         <button onclick="fillLastSav()" style="font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--paper);cursor:pointer;margin-left:auto">↩ 帶入上次金額</button></div>
       <div class="fr"><label class="fl">日期</label><input class="fi" type="date" id="svDt"></div>
       <div id="svInputs"></div>
-      <button class="sbtn" onclick="saveSav()">儲存快照</button>
+      <button class="sbtn" onclick="saveSav()" id="svSaveBtn">儲存快照</button>
+      <button onclick="cancelEditSav()" id="svCancelBtn" style="display:none;width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1.5px solid var(--border);background:var(--paper);color:var(--muted);font-size:13px;cursor:pointer">✕ 取消編輯</button>
     </div>
     <div class="card"><div class="ct">📅 歷史</div><div id="svHist"></div></div>
   </div>
@@ -2164,6 +2165,7 @@ function renderHB(){
 
 // ══ 資產 ══
 let aSub='sav';
+let editSavId=null; // 目前正在編輯的存款快照 id，null 代表新增模式
 function swASub(s,btn){aSub=s;document.querySelectorAll('#aSubTab .chip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');document.getElementById('aSav').style.display=s==='sav'?'block':'none';document.getElementById('aStk').style.display=s==='stk'?'block':'none'}
 function buildSvI(){document.getElementById('svInputs').innerHTML=BANKS.map(b=>`<div class="fr"><label class="fl">${b}</label><input class="fi" type="number" id="sv_${b}" placeholder="0" inputmode="numeric"></div>`).join('')}
 function fillLastSav(){
@@ -2172,11 +2174,48 @@ function fillLastSav(){
   BANKS.forEach(b=>{const el=document.getElementById('sv_'+b);if(el)el.value=bk[b]||''});
   toast('✓ 已帶入上次金額，記得確認/修改');
 }
+function editSav(id){
+  const s=savingsH.find(x=>x.id===id); if(!s){toast('⚠️ 找不到這筆記錄');return}
+  editSavId=id;
+  const dtEl=document.getElementById('svDt'); if(dtEl) dtEl.value=(s.date||'').slice(0,10);
+  BANKS.forEach(b=>{const el=document.getElementById('sv_'+b); if(el) el.value=s.banks?.[b]??''});
+  const sb=document.getElementById('svSaveBtn'); if(sb) sb.textContent='💾 更新這筆快照';
+  const cb=document.getElementById('svCancelBtn'); if(cb) cb.style.display='block';
+  document.getElementById('svFormCard')?.scrollIntoView({behavior:'smooth',block:'start'});
+  toast('✏️ 編輯模式，改好後按「更新這筆快照」');
+}
+function cancelEditSav(){
+  editSavId=null;
+  buildSvI();
+  const dtEl=document.getElementById('svDt'); if(dtEl) dtEl.value=today();
+  const sb=document.getElementById('svSaveBtn'); if(sb) sb.textContent='儲存快照';
+  const cb=document.getElementById('svCancelBtn'); if(cb) cb.style.display='none';
+}
+async function delSav(id){
+  if(!confirm('確定要刪除這筆存款快照嗎？此動作無法復原。')) return;
+  savingsH = savingsH.filter(x=>x.id!==id);
+  if(editSavId===id) cancelEditSav();
+  renderAssets();
+  toast('✓ 已刪除');
+  await deleteInGS('savings', id);
+}
 async function saveSav(){
   const dt=document.getElementById('svDt').value||today();
   const banks={};let tot=0;
   BANKS.forEach(b=>{const v=parseFloat(document.getElementById('sv_'+b)?.value)||0;banks[b]=v;tot+=v});
   if(!tot){toast('⚠️ 請填金額');return}
+  if(editSavId){
+    // ── 編輯既有快照：就地更新，不新增第二筆 ──
+    const idx=savingsH.findIndex(x=>x.id===editSavId);
+    if(idx>=0){
+      savingsH[idx]={...savingsH[idx], date:dt, banks, total:tot};
+      savingsH=normSavings(savingsH);
+      await updateInGS('savings', editSavId, {date:dt, total:tot, banks_json: JSON.stringify(banks)});
+    }
+    cancelEditSav();
+    renderAssets(); toast('✓ 快照已更新');
+    return;
+  }
   const snap={id:Date.now(),date:dt,banks,total:tot};
   savingsH = normSavings([...savingsH, snap]);
   renderAssets();toast('✓ 快照已儲存');
@@ -2195,7 +2234,7 @@ function renderSav(){
   }).join('');
   const sl=[...savingsH].reverse();
   renderGrowthChart(sl);
-  document.getElementById('svHist').innerHTML=savingsH.map(s=>`<div class="sh"><span style="font-family:'DM Mono';font-size:10px">${s.date}</span><span style="font-family:'DM Mono';font-weight:600">${fmt(s.total)}</span></div>`).join('');
+  document.getElementById('svHist').innerHTML=savingsH.map(s=>`<div class="sh" style="align-items:center"><span style="font-family:'DM Mono';font-size:10px">${(s.date||'').slice(0,10)}</span><span style="display:flex;align-items:center;gap:10px"><span style="font-family:'DM Mono';font-weight:600">${fmt(s.total)}</span><button onclick="editSav(${s.id})" title="編輯" style="border:none;background:none;cursor:pointer;font-size:13px;padding:2px;line-height:1">✏️</button><button onclick="delSav(${s.id})" title="刪除" style="border:none;background:none;cursor:pointer;font-size:13px;padding:2px;line-height:1">🗑️</button></span></div>`).join('');
   if(document.getElementById('bkDetail').style.display!=='none') renderBkDetail();
 }
 function renderAssets(){buildSvI();renderSav();if(aSub==='stk')renderSk()}
@@ -2205,14 +2244,20 @@ function renderGrowthChart(sl){
   const el=document.getElementById('savGrowth');
   if(!sl.length){el.innerHTML='<div class="empty">尚無記錄</div>';return}
   if(sl.length===1){el.innerHTML='<div style="text-align:center;padding:18px 0;color:var(--muted);font-size:12px">目前只有一筆快照，多存幾筆就會出現趨勢曲線</div>';return}
+  const dstr=d=>(d||'').slice(0,10); // 統一只取 YYYY-MM-DD，不管原始是否帶時間戳
   const W=Math.max(320,sl.length*68),H=150,padL=6,padR=6,padT=14,padB=22;
   const vals=sl.map(s=>s.total),mn=Math.min(...vals),mx=Math.max(...vals),rng=(mx-mn)||1;
   const stepX=(W-padL-padR)/(sl.length-1);
-  const pts=sl.map((s,i)=>({x:padL+i*stepX,y:padT+(1-(s.total-mn)/rng)*(H-padT-padB),date:s.date,total:s.total}));
+  const pts=sl.map((s,i)=>({x:padL+i*stepX,y:padT+(1-(s.total-mn)/rng)*(H-padT-padB),date:dstr(s.date),total:s.total}));
   const smooth=(p)=>{let d=`M${p[0].x},${p[0].y}`;for(let i=0;i<p.length-1;i++){const p0=p[i-1]||p[i],p1=p[i],p2=p[i+1],p3=p[i+2]||p2;const c1x=p1.x+(p2.x-p0.x)/6,c1y=p1.y+(p2.y-p0.y)/6,c2x=p2.x-(p3.x-p1.x)/6,c2y=p2.y-(p3.y-p1.y)/6;d+=` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`}return d};
   const line=smooth(pts);
   const area=`${line} L${pts[pts.length-1].x},${H-padB} L${pts[0].x},${H-padB} Z`;
-  const circles=pts.map((p,i)=>{const prev=pts[i-1],diff=prev?p.total-prev.total:null;const tip=`${p.date}  ${fmt(p.total)}${diff!==null?`  (${diff>=0?'+':''}${fmt(diff)})`:''}`;return `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="var(--sky)" stroke="#fff" stroke-width="1.4"><title>${tip}</title></circle>`}).join('');
+  // 每個點包一個 r=12 的透明圓當觸控熱區，手機比較好點到；點擊會更新下方的資訊列
+  const circles=pts.map((p,i)=>{
+    const prev=pts[i-1],diff=prev?p.total-prev.total:null;
+    const args=`'${p.date}',${p.total},${diff===null?'null':diff}`;
+    return `<g onclick="showSavTip(${args})" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="12" fill="transparent"/><circle cx="${p.x}" cy="${p.y}" r="3.5" fill="var(--sky)" stroke="#fff" stroke-width="1.4"/></g>`;
+  }).join('');
   const every=Math.max(1,Math.ceil(sl.length/6));
   const labels=pts.map((p,i)=>(i%every===0||i===pts.length-1)?`<text x="${p.x}" y="${H-6}" font-size="9" fill="var(--muted)" text-anchor="middle" font-family="DM Mono">${p.date.slice(5)}</text>`:'').join('');
   el.innerHTML=`<div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block;min-width:100%">
@@ -2224,7 +2269,15 @@ function renderGrowthChart(sl){
     <path d="${line}" fill="none" stroke="var(--sky)" stroke-width="2"/>
     ${circles}${labels}
   </svg></div>
-  <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px">滑過／點選圓點可看當次日期與金額</div>`;
+  <div id="savTip" style="text-align:center;font-size:12px;color:var(--ink);min-height:18px;margin-top:6px;font-family:'DM Mono'"></div>
+  <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px">點選圖上的點可看該次日期與金額</div>`;
+  const last=pts[pts.length-1],lastPrev=pts[pts.length-2];
+  showSavTip(last.date,last.total,lastPrev?last.total-lastPrev.total:null);
+}
+function showSavTip(date,total,diff){
+  const box=document.getElementById('savTip'); if(!box) return;
+  const diffHtml=diff!==null?` <span style="color:${diff>=0?'var(--inc)':'var(--exp)'}">(${diff>=0?'+':''}${fmt(diff)})</span>`:'';
+  box.innerHTML=`<b>${date}</b>　${fmt(total)}${diffHtml}`;
 }
 
 // 各帳戶結算明細：佔比甜甜圈圖 + 加總算式
@@ -2246,7 +2299,7 @@ function renderBkDetail(){
   document.getElementById('bkDetail').innerHTML=`
     <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
       <div style="width:104px;height:104px;border-radius:50%;background:conic-gradient(${stops});flex-shrink:0;position:relative">
-        <div style="position:absolute;inset:15px;background:var(--card);border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9px;color:var(--muted);line-height:1.3">${lat.date}<br><b style="font-size:10px;color:var(--ink);font-family:'DM Mono'">${fmt(lat.total)}</b></div>
+        <div style="position:absolute;inset:15px;background:var(--card);border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9px;color:var(--muted);line-height:1.3">${(lat.date||'').slice(0,10)}<br><b style="font-size:10px;color:var(--ink);font-family:'DM Mono'">${fmt(lat.total)}</b></div>
       </div>
       <div style="flex:1;min-width:150px">${legend}</div>
     </div>
