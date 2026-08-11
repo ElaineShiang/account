@@ -1126,7 +1126,7 @@ function aggregateStockTxns(txns){
   (txns||[]).forEach(t=>{
     if(!map[t.code]) map[t.code]={code:t.code,name:t.name||t.code,yahoo:t.code+'.TW',total_shares:0,total_cost:0,total_dividend:0,total_refund:0,buys:[],dividends:[]};
     const s=map[t.code];
-    if(t.name) s.name=t.name;
+    if(t.name && t.name !== t.code) s.name = t.name;
     if(t.type==='buy'){
       s.total_shares+=(+t.shares||0); s.total_cost+=(+t.total||0);
       s.buys.push({id:t.id,date:t.date,price:+t.price||0,shares:+t.shares||0,cost:+t.total||0});
@@ -1141,7 +1141,17 @@ function aggregateStockTxns(txns){
   return Object.values(map);
 }
 function normStockTxns(arr){
-  return (arr||[]).map(t=>({id:t.id,code:t.code,name:t.name||'',date:(t.date||'').slice(0,10),type:t.type||'buy',price:+t.price||0,shares:+t.shares||0,total:+t.total||0,dividend:+t.dividend||0}));
+  return (arr||[]).map(t=>{
+    const type = t.type||'buy';
+    const price=+t.price||0, shares=+t.shares||0, total=+t.total||0, dividend=+t.dividend||0;
+    const date=(t.date||'').slice(0,10);
+    let id = t.id;
+    if(id===undefined || id===null || id==='') {
+      // GS 若沒有回傳 id（例如舊格式資料列），用內容組出穩定 id，避免合併時互相蓋掉
+      id = 'gs-'+(t.code||'')+'-'+type+'-'+date+'-'+(dividend||total||0);
+    }
+    return {id, code:t.code, name:t.name||'', date, type, price, shares, total, dividend};
+  });
 }
 
 let records  = BUNDLE.records  || [];
@@ -1478,7 +1488,18 @@ async function loadFromGS() {
     if(d.tuitionD && d.tuitionD.length) tuitionD = fixTuitionCats(fixRecordDates(d.tuitionD));
     if(d.hbN      && d.hbN.length)      hongbaoN = d.hbN;
     if(d.hbD      && d.hbD.length)      hongbaoD = d.hbD;
-    if(d.stocks   && d.stocks.length) { stockTxns = normStockTxns(d.stocks); stocks = stockTxns; }
+    if(d.stocks   && d.stocks.length) {
+      // 重要：不能直接用 GS 的資料整批取代，因為歷史配息/買入記錄是寫死在網頁裡的種子資料，
+      // 從沒有真正被推送進 Google Sheets 過。整批取代會把還沒同步過的歷史資料弄丟。
+      // 改成用 id 合併：種子資料先鋪底，再用 GS 資料覆蓋/疊加（GS 有的 id 代表雲端最新版本）。
+      const gsTxns   = normStockTxns(d.stocks);
+      const seedTxns = flattenBundleStocks(BUNDLE.stocks || []);
+      const map = {};
+      seedTxns.forEach(t => map[t.id] = t);
+      gsTxns.forEach(t => map[t.id] = t);
+      stockTxns = Object.values(map);
+      stocks = stockTxns;
+    }
     if(d.savings  && d.savings.length)  savingsH = normSavings(d.savings);
 
     gsLoaded = true;
