@@ -21,7 +21,7 @@ body{font-family:'Noto Serif TC',serif;background:var(--paper);color:var(--ink);
 .sync-btn.syncing{animation:spin 1s linear infinite;color:var(--gold);border-color:var(--gold)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .pages{position:fixed;top:var(--hh);left:0;right:0;bottom:var(--bnh);overflow:hidden}
-.pg{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 20px;display:none}
+.pg{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(env(safe-area-inset-bottom) + 90px);display:none}
 .pg.on{display:block}
 .bnav{position:fixed;bottom:0;left:0;right:0;height:var(--bnh);background:var(--ink);border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:stretch;padding-bottom:env(safe-area-inset-bottom);z-index:100}
 .bnt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;border:none;background:transparent;color:rgba(255,255,255,.38);font-family:'Noto Serif TC',serif;font-size:9px;letter-spacing:.3px;padding:6px 0}
@@ -444,27 +444,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <button onclick="fetchStockPrices()" style="font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--paper);cursor:pointer;margin-top:2px">🔄 更新</button>
       </div>
     </div>
-  </div>
-
-  <!-- 新增/編輯配息 -->
-  <div class="card"><div class="ct" id="ivDqTitle">💰 新增配息</div>
-    <div class="fr">
-      <label class="fl">股票</label>
-      <select class="fs" id="ivDqStock">
-        <option value="">— 選已有股票 —</option>
-      </select>
-    </div>
-    <div style="text-align:center;font-size:11px;color:var(--muted);margin:-4px 0 8px">或新增股票</div>
-    <div class="fr2 fr">
-      <div><label class="fl">股票代號</label><input class="fi" type="text" id="ivDqCode" placeholder="如 2412"></div>
-      <div><label class="fl">股票名稱</label><input class="fi" type="text" id="ivDqName" placeholder="如 中華電"></div>
-    </div>
-    <div class="fr2 fr">
-      <div><label class="fl">配息金額</label><input class="fi" type="number" id="ivDqAmt" inputmode="numeric" placeholder="0"></div>
-      <div><label class="fl">配息日期</label><input class="fi" type="date" id="ivDqDate"></div>
-    </div>
-    <button class="sbtn" id="ivDqBtn" onclick="submitIvDividend()">儲存配息</button>
-    <button onclick="cancelIvDqEdit()" id="ivDqCancelBtn" style="display:none;width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1.5px solid var(--border);background:var(--paper);color:var(--muted);font-size:13px;cursor:pointer">✕ 取消編輯</button>
   </div>
 
   <!-- 各股票卡片 -->
@@ -1106,62 +1085,27 @@ function normSalaries(arr){
     return {...s, items};
   });
 }
-// 存款快照統一由新到舊排序，確保 savingsH[0] 一定是最新一筆（各處畫面都以此為「目前」資料）
+// 存款快照統一由新到舊排序，並比照薪資模組修過的 items_json 問題，banks 欄位也做同樣的容錯解析
+// 確保 savingsH[0] 一定是最新一筆（各處畫面都以此為「目前」資料），且每筆的 banks 一定是可用的物件
 function normSavings(arr){
-  return (arr||[]).slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
-}
-// ══ 投資：統一流水帳資料模型 ══
-// stockTxns：每一筆買入/賣出/配息都是一筆獨立紀錄（有唯一 id），是投資資料的唯一來源。
-// 這樣「新增配息」不論在收支頁快填、或投資頁直接新增，都寫進同一份陣列並同步到 GS。
-function flattenBundleStocks(bundleStocks){
-  const txns=[]; let seq=0;
-  (bundleStocks||[]).forEach(s=>{
-    (s.buys||[]).forEach(b=>{ seq++; txns.push({id:b.id||(5900000+seq),code:s.code,name:s.name,date:b.date,type:'buy',price:+b.price||0,shares:+b.shares||0,total:+b.cost||0,dividend:0}); });
-    (s.dividends||[]).forEach(d=>{ seq++; txns.push({id:d.id||(5900000+seq),code:s.code,name:s.name,date:d.date,type:'dividend',price:0,shares:0,total:0,dividend:+d.amount||0}); });
-  });
-  return txns;
-}
-function aggregateStockTxns(txns){
-  const map={};
-  (txns||[]).forEach(t=>{
-    if(!map[t.code]) map[t.code]={code:t.code,name:t.name||t.code,yahoo:t.code+'.TW',total_shares:0,total_cost:0,total_dividend:0,total_refund:0,buys:[],dividends:[]};
-    const s=map[t.code];
-    if(t.name && t.name !== t.code) s.name = t.name;
-    if(t.type==='buy'){
-      s.total_shares+=(+t.shares||0); s.total_cost+=(+t.total||0);
-      s.buys.push({id:t.id,date:t.date,price:+t.price||0,shares:+t.shares||0,cost:+t.total||0});
-    } else if(t.type==='sell'){
-      s.total_shares-=(+t.shares||0); s.total_cost-=(+t.total||0);
-      s.buys.push({id:t.id,date:t.date,price:+t.price||0,shares:-(+t.shares||0),cost:-(+t.total||0)});
-    } else if(t.type==='dividend'){
-      s.total_dividend+=(+t.dividend||0);
-      s.dividends.push({id:t.id,date:t.date,amount:+t.dividend||0});
+  return (arr||[]).map(s=>{
+    let banks = s.banks;
+    if(!banks || typeof banks !== 'object'){
+      const raw = s.banks_json;
+      if(raw && typeof raw === 'object') banks = raw;
+      else if(typeof raw === 'string' && raw.trim()){ try{ banks = JSON.parse(raw); }catch(e){ banks = {}; } }
+      else banks = {};
     }
-  });
-  return Object.values(map);
+    return {...s, banks};
+  }).sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
 }
-function normStockTxns(arr){
-  return (arr||[]).map(t=>{
-    const type = t.type||'buy';
-    const price=+t.price||0, shares=+t.shares||0, total=+t.total||0, dividend=+t.dividend||0;
-    const date=(t.date||'').slice(0,10);
-    let id = t.id;
-    if(id===undefined || id===null || id==='') {
-      // GS 若沒有回傳 id（例如舊格式資料列），用內容組出穩定 id，避免合併時互相蓋掉
-      id = 'gs-'+(t.code||'')+'-'+type+'-'+date+'-'+(dividend||total||0);
-    }
-    return {id, code:t.code, name:t.name||'', date, type, price, shares, total, dividend};
-  });
-}
-
 let records  = BUNDLE.records  || [];
 let salaries = normSalaries(BUNDLE.salaries || []);
 let tuitionN = BUNDLE.tuitionN || [];
 let tuitionD = BUNDLE.tuitionD || [];
 let hongbaoN = BUNDLE.hbN || [];
 let hongbaoD = BUNDLE.hbD || [];
-let stockTxns = flattenBundleStocks(BUNDLE.stocks || []);
-let stocks    = stockTxns; // 別名：資產→股票 分頁沿用舊變數名稱，與 stockTxns 是同一份陣列
+let stocks   = BUNDLE.stocks  || [];
 let savingsH = normSavings(BUNDLE.savings || []);
 let gsLoaded = false; // 是否已從 GS 載入
 
@@ -1488,18 +1432,7 @@ async function loadFromGS() {
     if(d.tuitionD && d.tuitionD.length) tuitionD = fixTuitionCats(fixRecordDates(d.tuitionD));
     if(d.hbN      && d.hbN.length)      hongbaoN = d.hbN;
     if(d.hbD      && d.hbD.length)      hongbaoD = d.hbD;
-    if(d.stocks   && d.stocks.length) {
-      // 重要：不能直接用 GS 的資料整批取代，因為歷史配息/買入記錄是寫死在網頁裡的種子資料，
-      // 從沒有真正被推送進 Google Sheets 過。整批取代會把還沒同步過的歷史資料弄丟。
-      // 改成用 id 合併：種子資料先鋪底，再用 GS 資料覆蓋/疊加（GS 有的 id 代表雲端最新版本）。
-      const gsTxns   = normStockTxns(d.stocks);
-      const seedTxns = flattenBundleStocks(BUNDLE.stocks || []);
-      const map = {};
-      seedTxns.forEach(t => map[t.id] = t);
-      gsTxns.forEach(t => map[t.id] = t);
-      stockTxns = Object.values(map);
-      stocks = stockTxns;
-    }
+    if(d.stocks   && d.stocks.length)   stocks   = d.stocks;
     if(d.savings  && d.savings.length)  savingsH = normSavings(d.savings);
 
     gsLoaded = true;
@@ -1561,7 +1494,7 @@ async function firstTimeSync() {
         tuitionD: BUNDLE.tuitionD,
         hbN:      BUNDLE.hbN,
         hbD:      BUNDLE.hbD,
-        stocks:   stockTxns,
+        stocks:   BUNDLE.stocks,
         savings:  BUNDLE.savings
       }
     });
@@ -1615,7 +1548,6 @@ async function submitQ() {
   setLS('rn', records.filter(x=>x.id>9e6));
   document.getElementById('qAmt').value='';
   document.getElementById('qNote').value='';
-  document.getElementById('qCat').value=''; // 重設類別，確保下次選同一類別（如配息）仍會觸發 onchange 連動視窗
   if(document.getElementById('qBiz')) document.getElementById('qBiz').checked=false;
   closeQ();
   if(curPg==='ie') renderIE();
@@ -2252,6 +2184,13 @@ function fillLastSav(){
   BANKS.forEach(b=>{const el=document.getElementById('sv_'+b);if(el)el.value=bk[b]||''});
   toast('✓ 已帶入上次金額，記得確認/修改');
 }
+function toggleSavRow(id){
+  const d=document.getElementById('svh-dt-'+id); if(!d) return;
+  const ar=document.getElementById('svh-ar-'+id);
+  const show=d.style.display==='none';
+  d.style.display=show?'block':'none';
+  if(ar) ar.style.transform=show?'rotate(90deg)':'rotate(0deg)';
+}
 function editSav(id){
   const s=savingsH.find(x=>x.id===id); if(!s){toast('⚠️ 找不到這筆記錄');return}
   editSavId=id;
@@ -2312,7 +2251,21 @@ function renderSav(){
   }).join('');
   const sl=[...savingsH].reverse();
   renderGrowthChart(sl);
-  document.getElementById('svHist').innerHTML=savingsH.map(s=>`<div class="sh" style="align-items:center"><span style="font-family:'DM Mono';font-size:10px">${(s.date||'').slice(0,10)}</span><span style="display:flex;align-items:center;gap:10px"><span style="font-family:'DM Mono';font-weight:600">${fmt(s.total)}</span><button onclick="editSav(${s.id})" title="編輯" style="border:none;background:none;cursor:pointer;font-size:13px;padding:2px;line-height:1">✏️</button><button onclick="delSav(${s.id})" title="刪除" style="border:none;background:none;cursor:pointer;font-size:13px;padding:2px;line-height:1">🗑️</button></span></div>`).join('');
+  document.getElementById('svHist').innerHTML=savingsH.map(s=>{
+    const bk=s.banks||{};
+    const detail=BANKS.map(b=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0 3px 16px;color:var(--muted)"><span>${b}</span><span style="font-family:'DM Mono'">${fmt(bk[b]||0)}</span></div>`).join('');
+    return `<div>
+      <div class="sh" style="align-items:center;cursor:pointer" onclick="toggleSavRow(${s.id})">
+        <span style="font-family:'DM Mono';font-size:10px">${(s.date||'').slice(0,10)} <span id="svh-ar-${s.id}" style="display:inline-block;font-size:9px;transition:transform .15s">▸</span></span>
+        <span style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:'DM Mono';font-weight:600">${fmt(s.total)}</span>
+          <button onclick="event.stopPropagation();editSav(${s.id})" title="編輯" style="border:none;background:none;cursor:pointer;font-size:13px;padding:2px;line-height:1">✏️</button>
+          <button onclick="event.stopPropagation();delSav(${s.id})" title="刪除" style="border:none;background:none;cursor:pointer;font-size:13px;padding:2px;line-height:1">🗑️</button>
+        </span>
+      </div>
+      <div id="svh-dt-${s.id}" style="display:none;padding:2px 0 6px">${detail}</div>
+    </div>`;
+  }).join('');
   if(document.getElementById('bkDetail').style.display!=='none') renderBkDetail();
 }
 function renderAssets(){buildSvI();renderSav();if(aSub==='stk')renderSk()}
@@ -2882,10 +2835,10 @@ let stockPrices = {};  // code -> 即時價格
 
 async function fetchStockPrices() {
   document.getElementById('inv-time').textContent = '更新中…';
-  const stockList = aggregateStockTxns(stockTxns);
+  const stocks = (window.stocks && window.stocks.length) ? window.stocks : (BUNDLE.stocks || []);
 
   // 用 Yahoo Finance query2（瀏覽器可跨域）
-  const symbols = stockList.map(s => s.yahoo).join(',');
+  const symbols = stocks.map(s => s.yahoo).join(',');
   const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice,shortName`;
 
   try {
@@ -2906,7 +2859,7 @@ async function fetchStockPrices() {
   } catch(err) {
     console.warn('Yahoo API 失敗，嘗試備用...', err);
     // 備用：用 TWSE API
-    await fetchPricesTWSE(stockList);
+    await fetchPricesTWSE(stocks);
   }
 }
 
@@ -2930,10 +2883,8 @@ async function fetchPricesTWSE(stocks) {
 }
 
 function renderInvest() {
-  initInvestSelects();
-  if(document.getElementById('ivDqDate') && !document.getElementById('ivDqDate').value) document.getElementById('ivDqDate').value = today();
-  // 投資頁彙整資料：由 stockTxns（唯一資料來源）即時計算
-  const invData = aggregateStockTxns(stockTxns);
+  // 投資頁永遠用 Bundle 的彙整資料（GS 存的是舊格式流水帳）
+  const invData = BUNDLE.stocks || [];
   if(!invData.length) {
     document.getElementById('inv-list').innerHTML = '<div class="empty">尚無投資記錄</div>';
     return;
@@ -2956,17 +2907,10 @@ function renderInvest() {
     const pnlColor = !pnl ? 'var(--muted)' : pnl >= 0 ? 'var(--inc)' : 'var(--exp)';
     const pnlSign  = pnl >= 0 ? '+' : '';
 
-    const divsSorted = (s.dividends || []).slice().sort((a,b) => b.date.localeCompare(a.date));
-    const divRows = divsSorted.map(d =>
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--cream);font-size:11px">'+
-        '<span>'+d.date+'</span>'+
-        '<span style="color:var(--inc);font-family:\'DM Mono\'">+'+fmt(d.amount)+'</span>'+
-        '<span style="display:flex;gap:8px;margin-left:8px">'+
-          '<span onclick="editIvDividend('+d.id+')" style="cursor:pointer">✏️</span>'+
-          '<span onclick="deleteIvDividend('+d.id+')" style="cursor:pointer">🗑️</span>'+
-        '</span>'+
-      '</div>'
-    ).join('');
+    const recentDivs = (s.dividends || [])
+      .sort((a,b) => b.date.localeCompare(a.date)).slice(0,3)
+      .map(d => '<span style="font-size:10px;color:var(--muted)">'+d.date.slice(0,7)+' +'+fmt(d.amount)+'</span>')
+      .join('  ');
 
     return '<div class="card" style="margin-bottom:10px">'+
       '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">'+
@@ -3009,10 +2953,7 @@ function renderInvest() {
           (totalReturn>=0?'+':'')+totalReturn.toFixed(1)+'%'+
         '</span>'+
       '</div>' : '')+
-      '<details style="margin-top:8px" open>'+
-        '<summary style="font-size:11px;color:var(--sky);cursor:pointer">配息記錄（共'+divsSorted.length+'筆）</summary>'+
-        '<div style="margin-top:6px">'+(divRows || '<div class="empty" style="padding:8px 0">尚無配息記錄</div>')+'</div>'+
-      '</details>'+
+      (recentDivs ? '<div style="font-size:10px;color:var(--muted);margin-top:4px">最近配息：'+recentDivs+'</div>' : '')+
       '<details style="margin-top:8px">'+
         '<summary style="font-size:11px;color:var(--sky);cursor:pointer">查看買入記錄</summary>'+
         '<div style="margin-top:6px">'+
@@ -3043,11 +2984,10 @@ function renderInvest() {
 // ══ 投資同步（配息/買入）══
 function initInvestSelects() {
   // 填入股票選單
-  const stockList = aggregateStockTxns(stockTxns);
-  ['dqStock','bqStock','ivDqStock'].forEach(selId => {
+  const stockList = BUNDLE.stocks || [];
+  ['dqStock','bqStock'].forEach(selId => {
     const sel = document.getElementById(selId);
     if(!sel) return;
-    const cur = sel.value;
     sel.innerHTML = '<option value="">— 選擇股票 —</option>';
     stockList.forEach(s => {
       const opt = document.createElement('option');
@@ -3055,7 +2995,6 @@ function initInvestSelects() {
       opt.textContent = s.code + ' ' + s.name;
       sel.appendChild(opt);
     });
-    if(cur) sel.value = cur;
   });
 }
 
@@ -3078,14 +3017,16 @@ async function submitDivQuick() {
   if(!code) { toast('⚠️ 請選擇股票'); return; }
   if(!amt)  { toast('⚠️ 請填配息金額'); return; }
 
-  const existing = aggregateStockTxns(stockTxns).find(s => s.code === code);
-  const name = existing?.name || code;
-  const txn = {id: Date.now(), code, name, date, type: 'dividend', price: 0, shares: 0, total: 0, dividend: amt};
-  stockTxns.push(txn);
+  // 更新 BUNDLE.stocks 裡的配息記錄
+  const stock = BUNDLE.stocks.find(s => s.code === code);
+  if(stock) {
+    stock.dividends = stock.dividends || [];
+    stock.dividends.push({date, amount: amt});
+    stock.total_dividend = (stock.total_dividend || 0) + amt;
+  }
   closeDivQuick();
   toast('✅ 配息已同步到投資頁！');
   if(curPg === 'invest') renderInvest();
-  await pushToGS('stocks', txn);
 }
 
 // ── 投資買入快填 ──
@@ -3124,87 +3065,32 @@ async function submitBuyQuick() {
     name = (document.getElementById('bqName')?.value || '').trim();
     if(!code || !name) { toast('⚠️ 請選擇股票或填入代號和名稱'); return; }
   } else {
-    const existing = aggregateStockTxns(stockTxns).find(s => s.code === code);
+    const existing = BUNDLE.stocks.find(s => s.code === code);
     name = existing?.name || code;
   }
   if(!price || !shares) { toast('⚠️ 請填入價格和股數'); return; }
 
-  const txn = {id: Date.now(), code, name, date, type: 'buy', price, shares, total: cost || price * shares, dividend: 0};
-  stockTxns.push(txn);
+  const buyRecord = {date, price, shares, amount: price * shares, cost: cost || price * shares};
+
+  // 更新或新增 BUNDLE.stocks
+  let stock = BUNDLE.stocks.find(s => s.code === code);
+  if(stock) {
+    stock.buys = stock.buys || [];
+    stock.buys.push(buyRecord);
+    stock.total_shares  = (stock.total_shares  || 0) + shares;
+    stock.total_cost    = (stock.total_cost    || 0) + (cost || price * shares);
+  } else {
+    const yahoo = code + '.TW';
+    BUNDLE.stocks.push({
+      id: Date.now(), code, name, yahoo,
+      total_shares: shares, total_cost: cost || price * shares,
+      total_dividend: 0, total_refund: 0,
+      buys: [buyRecord], dividends: []
+    });
+  }
   closeBuyQuick();
   toast('✅ 買入記錄已同步到投資頁！');
   if(curPg === 'invest') renderInvest();
-  await pushToGS('stocks', txn);
-}
-
-// ── 投資頁：直接新增／編輯／刪除配息 ──
-let ivDqEditId = null;
-function editIvDividend(id) {
-  const t = stockTxns.find(x => x.id === id && x.type === 'dividend');
-  if(!t) return;
-  initInvestSelects();
-  document.getElementById('ivDqStock').value = t.code;
-  document.getElementById('ivDqCode').value = '';
-  document.getElementById('ivDqName').value = '';
-  document.getElementById('ivDqAmt').value = t.dividend;
-  document.getElementById('ivDqDate').value = t.date;
-  ivDqEditId = id;
-  document.getElementById('ivDqTitle').textContent = '✏️ 編輯配息';
-  document.getElementById('ivDqBtn').textContent = '更新配息';
-  document.getElementById('ivDqCancelBtn').style.display = 'block';
-  document.getElementById('ivDqStock').scrollIntoView({behavior:'smooth', block:'center'});
-}
-function cancelIvDqEdit() {
-  ivDqEditId = null;
-  document.getElementById('ivDqAmt').value = '';
-  document.getElementById('ivDqCode').value = '';
-  document.getElementById('ivDqName').value = '';
-  document.getElementById('ivDqTitle').textContent = '💰 新增配息';
-  document.getElementById('ivDqBtn').textContent = '儲存配息';
-  document.getElementById('ivDqCancelBtn').style.display = 'none';
-}
-async function submitIvDividend() {
-  let code = document.getElementById('ivDqStock').value;
-  let name = '';
-  if(!code) {
-    code = (document.getElementById('ivDqCode').value || '').trim();
-    name = (document.getElementById('ivDqName').value || '').trim();
-    if(!code) { toast('⚠️ 請選擇股票或填入代號'); return; }
-  } else {
-    const existing = aggregateStockTxns(stockTxns).find(s => s.code === code);
-    name = existing?.name || code;
-  }
-  const amt  = parseFloat(document.getElementById('ivDqAmt').value) || 0;
-  const date = document.getElementById('ivDqDate').value || today();
-  if(!amt) { toast('⚠️ 請填配息金額'); return; }
-
-  if(ivDqEditId) {
-    const id = ivDqEditId;
-    const t = stockTxns.find(x => x.id === id);
-    if(t) { t.code = code; t.name = name; t.date = date; t.dividend = amt; }
-    toast('✅ 配息已更新');
-    cancelIvDqEdit();
-    renderInvest();
-    await updateInGS('stocks', id, {code, name, date, type: 'dividend', price: 0, shares: 0, total: 0, dividend: amt});
-    return;
-  }
-
-  const txn = {id: Date.now(), code, name, date, type: 'dividend', price: 0, shares: 0, total: 0, dividend: amt};
-  stockTxns.push(txn);
-  document.getElementById('ivDqAmt').value = '';
-  document.getElementById('ivDqCode').value = '';
-  document.getElementById('ivDqName').value = '';
-  toast('✅ 配息已新增');
-  renderInvest();
-  await pushToGS('stocks', txn);
-}
-async function deleteIvDividend(id) {
-  if(!confirm('確定刪除這筆配息記錄？')) return;
-  stockTxns = stockTxns.filter(x => x.id !== id);
-  stocks = stockTxns;
-  toast('🗑️ 已刪除');
-  renderInvest();
-  await deleteInGS('stocks', id);
 }
 
 // ══ 學費補助快填 ══
