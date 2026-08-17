@@ -329,15 +329,17 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 
 <!-- 孩子 -->
 <div class="pg" id="pg-kids">
-  <div class="chips" id="kSubTab">
-    <button class="chip on" onclick="swKSub('t',this)">🏫 學費</button>
-    <button class="chip" onclick="swKSub('h',this)">🧧 紅包</button>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+    <div class="ctab" id="kChildTab" style="margin-bottom:0">
+      <button class="cchip on" onclick="swKid('nora',this)">🌸 Nora</button>
+      <button class="cchip" onclick="swKid('dennis',this)">🌿 Dennis</button>
+    </div>
+    <div class="chips" id="kSubTab" style="margin-bottom:0">
+      <button class="chip on" onclick="swKSub('t',this)">🏫 學費</button>
+      <button class="chip" onclick="swKSub('h',this)">🧧 紅包</button>
+    </div>
   </div>
   <div id="kTui">
-    <div class="ctab">
-      <button class="cchip on" onclick="swC('nora',this)">🌸 Nora</button>
-      <button class="cchip" onclick="swC('dennis',this)">🌿 Dennis</button>
-    </div>
     <div id="tuiStats"></div>
     <!-- 學費搜尋 -->
     <div class="srch-wrap" style="margin-bottom:10px">
@@ -394,10 +396,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <div id="tList"></div>
   </div>
   <div id="kHb" style="display:none">
-    <div class="ctab">
-      <button class="cchip on" onclick="swHB('nora',this)">🌸 Nora</button>
-      <button class="cchip" onclick="swHB('dennis',this)">🌿 Dennis</button>
-    </div>
     <div class="card"><div class="ct">＋ 新增</div>
       <div class="fr2 fr">
         <div><label class="fl">農曆年</label><select class="fs" id="hbYr"></select></div>
@@ -407,8 +405,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <button class="sbtn" onclick="addHB()" id="hbSaveBtn">記錄</button>
       <button class="sbtn sec" onclick="cancelEditHB()" id="hbCancelBtn" style="display:none">取消編輯</button>
     </div>
-    <div class="chips" id="hbSort" style="margin-bottom:6px"></div>
-    <div id="hbList"></div>
+    <div class="chips" id="hbViewTab" style="margin-bottom:6px">
+      <button class="chip on" onclick="swHbView('table',this)">📊 統計表</button>
+      <button class="chip" onclick="swHbView('list',this)">📋 明細列表</button>
+    </div>
+    <div id="hbTableWrap"></div>
+    <div class="chips" id="hbSort" style="margin-bottom:6px;display:none"></div>
+    <div id="hbList" style="display:none"></div>
   </div>
 </div>
 
@@ -2076,7 +2079,14 @@ function inferCat(s){
   return 'other';
 }
 let cC='nora',cTC='kinder',cTF='all';
-function swC(c,btn){cC=c;document.querySelectorAll('#kTui .cchip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');cTC=c==='nora'?'kinder':'daycare';buildTCB();buildTDF();renderTui()}
+function swKid(k,btn){
+  cC=k; cHB=k;
+  document.querySelectorAll('#kChildTab .cchip').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  cTC=k==='nora'?'kinder':'daycare';
+  buildTCB();buildTDF();renderTui();
+  cancelEditHB();renderHB();
+}
 function swKSub(s,btn){document.querySelectorAll('#kSubTab .chip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');document.getElementById('kTui').style.display=s==='t'?'block':'none';document.getElementById('kHb').style.display=s==='h'?'block':'none'}
 function buildTCB(){const el=document.getElementById('tuiCatBtns');if(!el)return;el.innerHTML=TCATS.map(c=>`<button onclick="selTC('${c.id}')" style="padding:5px 9px;border-radius:14px;border:2px solid ${cTC===c.id?c.color:'var(--border)'};background:${cTC===c.id?c.color:'var(--paper)'};color:${cTC===c.id?'#fff':'var(--muted)'};font-size:12px;cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">${c.label}</button>`).join('')}
 function selTC(id){cTC=id;buildTCB();buildTDF();calcT()}
@@ -2201,12 +2211,18 @@ function renderTui(){
   }).join('');
 }
 function filtTC(c){cTF=c;renderTui()}
-function renderKids(){renderTui()}
+function renderKids(){renderTui();renderHB()}
 
 // ══ 紅包 ══
 let cHB='nora';
 let editHbId=null;
-function swHB(c,btn){cHB=c;document.querySelectorAll('#kHb .cchip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');cancelEditHB();renderHB()}
+let hbView='table';
+function swHbView(v,btn){
+  hbView=v;
+  document.querySelectorAll('#hbViewTab .chip').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  renderHB();
+}
 function initHBYrs(){const s=document.getElementById('hbYr');const c=new Date().getFullYear();for(let y=c+1;y>=2020;y--)s.innerHTML+=`<option ${y===c?'selected':''}>${y}</option>`}
 async function addHB(){
   const a=parseFloat(document.getElementById('hbAmt').value),g=document.getElementById('hbWho').value.trim(),y=+document.getElementById('hbYr').value;
@@ -2255,23 +2271,59 @@ async function delHB(id){
 }
 function renderHB(){
   const list=cHB==='nora'?hongbaoN:hongbaoD;
-  const el=document.getElementById('hbList');
+  const tableWrap=document.getElementById('hbTableWrap');
+  const listWrap=document.getElementById('hbList');
   const sortEl=document.getElementById('hbSort');
+  const showTable=hbView==='table';
+  if(tableWrap) tableWrap.style.display=showTable?'block':'none';
+  if(listWrap) listWrap.style.display=showTable?'none':'block';
+  if(sortEl) sortEl.style.display=showTable?'none':'flex';
+  if(showTable){ renderHBTable(list); return; }
   if(sortEl) sortEl.innerHTML=sortChips('hb',[
     {v:'year_desc',l:'📅 年份新→舊'},{v:'year_asc',l:'年份舊→新'},
     {v:'amt_desc',l:'💰 金額大→小'},{v:'amt_asc',l:'金額小→大'}
   ]);
-  if(!list.length){el.innerHTML='<div class="empty">尚無記錄</div>';return}
+  if(!list.length){listWrap.innerHTML='<div class="empty">尚無記錄</div>';return}
   const pref=sortPref.hb||'year_desc';
   const bY={};list.forEach(h=>{if(!bY[h.year])bY[h.year]=[];bY[h.year].push(h)});
   const years=Object.keys(bY).sort((a,b)=>pref==='year_asc'?(a-b):(b-a));
-  el.innerHTML=years.map(y=>{
+  listWrap.innerHTML=years.map(y=>{
     let its=[...bY[y]];
     if(pref==='amt_desc') its.sort((a,b)=>b.amount-a.amount);
     else if(pref==='amt_asc') its.sort((a,b)=>a.amount-b.amount);
     const tot=its.reduce((a,b)=>a+b.amount,0);
     return `<div class="card"><div class="hbyr"><span>${y}年</span><span style="font-family:'DM Mono';font-size:11px;color:var(--muted)">合計 ${fmt(tot)}</span></div>${its.map(h=>`<div class="hbi" style="align-items:center"><span style="font-size:12px">${h.giver}</span><span style="display:flex;align-items:center;gap:8px"><span style="font-family:'DM Mono';font-size:12px;color:var(--rust)">${fmt(h.amount)}</span><button onclick="editHB(${h.id})" title="編輯" style="border:none;background:none;cursor:pointer;font-size:12px;padding:2px;line-height:1">✏️</button><button onclick="delHB(${h.id})" title="刪除" style="border:none;background:none;cursor:pointer;font-size:12px;padding:2px;line-height:1">✕</button></span></div>`).join('')}</div>`;
   }).join('');
+}
+const HB_YR_COLORS=['#fdf3e0','#e8f2fb','#fdeee0','#e8f2fb','#fdf3e0','#e8f2fb','#fdeee0'];
+function renderHBTable(list){
+  const wrap=document.getElementById('hbTableWrap');
+  if(!wrap) return;
+  if(!list.length){wrap.innerHTML='<div class="empty">尚無記錄</div>';return}
+  const years=[...new Set(list.map(h=>h.year))].sort((a,b)=>a-b);
+  const givers=[];
+  list.forEach(h=>{if(!givers.includes(h.giver)) givers.push(h.giver)});
+  const amtMap={};
+  givers.forEach(g=>amtMap[g]={});
+  list.forEach(h=>{amtMap[h.giver][h.year]=(amtMap[h.giver][h.year]||0)+h.amount});
+  const yearTotals={};
+  years.forEach(y=>{yearTotals[y]=list.filter(h=>h.year===y).reduce((a,b)=>a+b.amount,0)});
+  const grand=list.reduce((a,b)=>a+b.amount,0);
+  let html=`<div style="overflow-x:auto;border:1px solid var(--border);border-radius:9px"><table style="border-collapse:collapse;width:100%;font-size:11.5px;white-space:nowrap">`;
+  html+=`<thead><tr><th style="position:sticky;left:0;z-index:1;background:var(--card);padding:7px 10px;text-align:left;border-bottom:2px solid var(--border);font-family:'Playfair Display',serif">贈予者</th>`;
+  years.forEach((y,i)=>{html+=`<th style="padding:7px 10px;text-align:right;background:${HB_YR_COLORS[i%HB_YR_COLORS.length]};border-bottom:2px solid var(--border);font-family:'DM Mono'">${y}</th>`});
+  html+=`<th style="padding:7px 10px;text-align:right;font-weight:700;border-bottom:2px solid var(--border);background:var(--paper)">合計</th></tr></thead><tbody>`;
+  givers.forEach(g=>{
+    const rowTot=years.reduce((a,y)=>a+(amtMap[g][y]||0),0);
+    html+=`<tr><td style="position:sticky;left:0;background:var(--card);padding:6px 10px;border-bottom:1px dashed var(--cream)">${g}</td>`;
+    years.forEach(y=>{const v=amtMap[g][y];html+=`<td style="padding:6px 10px;text-align:right;font-family:'DM Mono';color:${v?'var(--ink)':'var(--muted)'};border-bottom:1px dashed var(--cream)">${v?fmt(v):'—'}</td>`});
+    html+=`<td style="padding:6px 10px;text-align:right;font-family:'DM Mono';font-weight:700;border-bottom:1px dashed var(--cream)">${fmt(rowTot)}</td></tr>`;
+  });
+  html+=`<tr style="font-weight:700"><td style="position:sticky;left:0;background:var(--cream);padding:7px 10px">TOTAL</td>`;
+  years.forEach(y=>{html+=`<td style="padding:7px 10px;text-align:right;font-family:'DM Mono';background:var(--cream)">${fmt(yearTotals[y])}</td>`});
+  html+=`<td style="padding:7px 10px;text-align:right;font-family:'DM Mono';background:var(--gold);color:var(--ink)">${fmt(grand)}</td></tr>`;
+  html+=`</tbody></table></div>`;
+  wrap.innerHTML=html;
 }
 
 // ══ 資產 ══
@@ -3327,6 +3379,7 @@ async function submitSubsidyQuick() {
   // 初始化各頁面需要的 UI
   ['tDt','skDt','svDt'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today();});
   if(typeof initSalYrs==='function') initSalYrs();
+  if(typeof initHBYrs==='function') initHBYrs();
   if(typeof buildTCB==='function') buildTCB();
   if(typeof buildTDF==='function') buildTDF();
 
@@ -3341,6 +3394,7 @@ async function submitSubsidyQuick() {
   if(typeof renderIE==='function') renderIE();
   if(typeof renderSalWithSearch==='function') renderSalWithSearch();
   if(typeof renderTui==='function') renderTui();
+  if(typeof renderHB==='function') renderHB();
 
   // 背景從 GS 載入最新資料（帶 timeout）
   setSyncStatus('loading','連線中…');
@@ -3352,6 +3406,7 @@ async function submitSubsidyQuick() {
     if(typeof renderIE==='function') renderIE();
     if(typeof renderSalWithSearch==='function') renderSalWithSearch();
     if(typeof renderTui==='function') renderTui();
+    if(typeof renderHB==='function') renderHB();
   }).catch(err=>{
     console.warn('GS 載入失敗，使用內建資料:', err.message);
     setSyncStatus('error','離線模式');
