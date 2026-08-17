@@ -231,6 +231,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <span>📒 記錄</span>
       <span id="rCnt" style="font-size:10px;color:var(--muted);margin-left:auto"></span>
     </div>
+    <div class="chips" id="rSort" style="margin-bottom:6px"></div>
     <div class="rl" id="rList"></div>
   </div>
 </div>
@@ -322,6 +323,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <input class="srch" type="search" id="salSrch" placeholder="搜尋年月、金額、項目…" oninput="renderSalWithSearch()">
     <button class="srch-clr" onclick="document.getElementById('salSrch').value='';renderSalWithSearch()">清除</button>
   </div>
+  <div class="chips" id="salSort" style="margin:8px 0 0"></div>
   <div id="salYV"></div>
 </div>
 
@@ -388,6 +390,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       </div>
       <button class="sbtn" onclick="addTui()">儲存</button>
     </div>
+    <div class="chips" id="tuiSort" style="margin-bottom:6px"></div>
     <div id="tList"></div>
   </div>
   <div id="kHb" style="display:none">
@@ -447,6 +450,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   </div>
 
   <!-- 各股票卡片 -->
+  <div class="chips" id="invSort" style="margin-bottom:6px"></div>
   <div id="inv-list"></div>
 </div>
 
@@ -477,7 +481,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <button class="sbtn" onclick="saveSav()" id="svSaveBtn">儲存快照</button>
       <button onclick="cancelEditSav()" id="svCancelBtn" style="display:none;width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1.5px solid var(--border);background:var(--paper);color:var(--muted);font-size:13px;cursor:pointer">✕ 取消編輯</button>
     </div>
-    <div class="card"><div class="ct">📅 歷史</div><div id="svHist"></div></div>
+    <div class="card"><div class="ct fb" style="flex-direction:row;gap:0"><span>📅 歷史</span></div><div class="chips" id="savSort" style="margin-bottom:6px"></div><div id="svHist"></div></div>
   </div>
   <div id="aStk" style="display:none">
     <div class="card"><div class="ct">＋ 新增</div>
@@ -504,6 +508,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <div class="ct fb" style="flex-direction:row;gap:0">
         <span>📈 持股</span><span id="dTot" style="font-size:10px;color:var(--muted);margin-left:auto"></span>
       </div>
+      <div class="chips" id="skSort" style="margin-bottom:6px"></div>
       <div id="skList"></div>
     </div>
   </div>
@@ -1595,6 +1600,27 @@ async function saveE() {
 
 // ══ 搜尋 ══
 let srchQ='', cM='all';
+
+// ══ 通用排序 ══
+let sortPref = {rec:'date_desc', sal:'date_desc', tui:'date_desc', sav:'date_desc', sk:'date_desc', hd:'code_asc'};
+function setSortPref(page,val){
+  sortPref[page]=val;
+  const map={rec:'renderList',sal:'renderSalWithSearch',tui:'renderTui',sav:'renderSav',sk:'renderSk',hd:'renderInvest'};
+  const fn=window[map[page]]; if(fn) fn();
+}
+function sortChips(page,opts){
+  return opts.map(o=>`<button class="chip ${sortPref[page]===o.v?'on':''}" onclick="setSortPref('${page}','${o.v}')" style="font-size:11px">${o.l}</button>`).join('');
+}
+function cmpBy(pref,dA,aA,cA,dB,aB,cB){
+  switch(pref){
+    case 'date_asc': return (dA||'').localeCompare(dB||'');
+    case 'amt_desc': return (aB||0)-(aA||0);
+    case 'amt_asc': return (aA||0)-(aB||0);
+    case 'cat': return (cA||'').localeCompare(cB||'','zh-Hant');
+    case 'date_desc':
+    default: return (dB||'').localeCompare(dA||'');
+  }
+}
 function doSearch() { srchQ=document.getElementById('srch').value.trim().toLowerCase(); cM='all'; buildMF(); renderList(); }
 function clearSrch() { document.getElementById('srch').value=''; srchQ=''; renderList(); }
 function matchR(r) {
@@ -1611,8 +1637,7 @@ function buildMF() {
 }
 function filtM(m){ cM=m; srchQ=''; document.getElementById('srch').value=''; buildMF(); renderList(); }
 function renderList() {
-  let list = (cM==='all' ? records : records.filter(r=>r.date.startsWith(cM)))
-    .sort((a,b)=>b.date.localeCompare(a.date));
+  let list = (cM==='all' ? records : records.filter(r=>r.date.startsWith(cM)));
   if(srchQ) list = list.filter(matchR);
 
   const tE=sum(list,'expense'), tI=sum(list,'income');
@@ -1621,11 +1646,31 @@ function renderList() {
   document.getElementById('sumBal').textContent=fmt(tI-tE);
   document.getElementById('rCnt').textContent=(srchQ?'搜尋：':'')+list.length+' 筆';
 
+  const sortEl=document.getElementById('rSort');
+  if(sortEl) sortEl.innerHTML=sortChips('rec',[
+    {v:'date_desc',l:'📅 日期新→舊'},{v:'date_asc',l:'日期舊→新'},
+    {v:'amt_desc',l:'💰 金額大→小'},{v:'amt_asc',l:'金額小→大'},
+    {v:'cat',l:'🏷 分類'}
+  ]);
+
   const el = document.getElementById('rList');
   if(!list.length){
     el.innerHTML='<div class="empty">'+(srchQ?'找不到符合記錄':'本期無記錄')+'</div>';
     return;
   }
+
+  const pref=sortPref.rec;
+  const frag = document.createDocumentFragment();
+
+  if(pref!=='date_desc' && pref!=='date_asc'){
+    // 非日期排序：不分組，直接依排序條件顯示扁平列表（每筆帶日期）
+    list = [...list].sort((a,b)=>cmpBy(pref, a.date,a.amount,a.cat, b.date,b.amount,b.cat));
+    list.forEach(r=>frag.appendChild(buildRecRow(r,true)));
+    el.innerHTML=''; el.appendChild(frag);
+    return;
+  }
+
+  list = [...list].sort((a,b)=>pref==='date_asc'?a.date.localeCompare(b.date):b.date.localeCompare(a.date));
 
   // 按日期分組
   const byDate = {};
@@ -1637,9 +1682,7 @@ function renderList() {
     byDate[d].rows.push(r);
   });
 
-  const frag = document.createDocumentFragment();
-
-  Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(date => {
+  Object.keys(byDate).sort((a,b)=>pref==='date_asc'?a.localeCompare(b):b.localeCompare(a)).forEach(date => {
     const g = byDate[date];
     const [y,m,d] = date.split('-');
 
@@ -1673,70 +1716,70 @@ function renderList() {
     frag.appendChild(hdr);
 
     // 各筆記錄
-    g.rows.forEach(r => {
-      const row = document.createElement('div');
-      row.className = 'ri';
-      if(batchSelected.has(r.id)) {
-        row.style.cssText = 'background:#eef5ff;margin:0 -4px;padding-left:4px;padding-right:4px;border-radius:6px;cursor:pointer';
-      } else if(batchMode) {
-        row.style.cursor = 'pointer';
-      }
-
-      if(batchMode) {
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.className = 'batch-cb';
-        cb.dataset.id = r.id;
-        cb.checked = batchSelected.has(r.id);
-        cb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--sky);flex-shrink:0;margin-top:0';
-        cb.addEventListener('click', function(e){ e.stopPropagation(); batchToggle(r.id, row); });
-        row.appendChild(cb);
-        row.addEventListener('click', function(){ batchToggle(r.id, row); });
-      } else {
-        const dot = document.createElement('div');
-        dot.className = 'rdot '+r.type;
-        row.appendChild(dot);
-        row.addEventListener('click', function(){ openE(r.id); });
-      }
-
-      const rb = document.createElement('div');
-      rb.className = 'rb';
-      const rn = document.createElement('div');
-      rn.className = 'rn';
-      if(r.isBiz) {
-        const badge = document.createElement('span');
-        badge.style.cssText = 'background:var(--sky);color:#fff;font-size:9px;padding:1px 5px;border-radius:5px;margin-right:4px;vertical-align:middle';
-        badge.textContent = '💼出差';
-        rn.appendChild(badge);
-      }
-      rn.appendChild(document.createTextNode(r.note||r.cat||'—'));
-      rb.appendChild(rn);
-
-      const rm = document.createElement('div');
-      rm.className = 'rm';
-      rm.textContent = (r.cat?' '+r.cat:'')+(r.payment?' ・'+r.payment:'');
-      rb.appendChild(rm);
-      row.appendChild(rb);
-
-      const ra = document.createElement('div');
-      ra.className = 'ra '+r.type;
-      ra.textContent = (r.type==='expense'?'-':'+')+fmt(r.amount);
-      row.appendChild(ra);
-
-      if(!batchMode) {
-        const del = document.createElement('button');
-        del.className = 'rdel';
-        del.textContent = '✕';
-        del.addEventListener('click', function(e){ e.stopPropagation(); delR(r.id); });
-        row.appendChild(del);
-      }
-
-      frag.appendChild(row);
-    });
+    g.rows.forEach(r => frag.appendChild(buildRecRow(r,false)));
   });
 
   el.innerHTML = '';
   el.appendChild(frag);
+}
+function buildRecRow(r, showDate){
+  const row = document.createElement('div');
+  row.className = 'ri';
+  if(batchSelected.has(r.id)) {
+    row.style.cssText = 'background:#eef5ff;margin:0 -4px;padding-left:4px;padding-right:4px;border-radius:6px;cursor:pointer';
+  } else if(batchMode) {
+    row.style.cursor = 'pointer';
+  }
+
+  if(batchMode) {
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'batch-cb';
+    cb.dataset.id = r.id;
+    cb.checked = batchSelected.has(r.id);
+    cb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--sky);flex-shrink:0;margin-top:0';
+    cb.addEventListener('click', function(e){ e.stopPropagation(); batchToggle(r.id, row); });
+    row.appendChild(cb);
+    row.addEventListener('click', function(){ batchToggle(r.id, row); });
+  } else {
+    const dot = document.createElement('div');
+    dot.className = 'rdot '+r.type;
+    row.appendChild(dot);
+    row.addEventListener('click', function(){ openE(r.id); });
+  }
+
+  const rb = document.createElement('div');
+  rb.className = 'rb';
+  const rn = document.createElement('div');
+  rn.className = 'rn';
+  if(r.isBiz) {
+    const badge = document.createElement('span');
+    badge.style.cssText = 'background:var(--sky);color:#fff;font-size:9px;padding:1px 5px;border-radius:5px;margin-right:4px;vertical-align:middle';
+    badge.textContent = '💼出差';
+    rn.appendChild(badge);
+  }
+  rn.appendChild(document.createTextNode(r.note||r.cat||'—'));
+  rb.appendChild(rn);
+
+  const rm = document.createElement('div');
+  rm.className = 'rm';
+  rm.textContent = (showDate?r.date+' ・':'')+(r.cat?' '+r.cat:'')+(r.payment?' ・'+r.payment:'');
+  rb.appendChild(rm);
+  row.appendChild(rb);
+
+  const ra = document.createElement('div');
+  ra.className = 'ra '+r.type;
+  ra.textContent = (r.type==='expense'?'-':'+')+fmt(r.amount);
+  row.appendChild(ra);
+
+  if(!batchMode) {
+    const del = document.createElement('button');
+    del.className = 'rdel';
+    del.textContent = '✕';
+    del.addEventListener('click', function(e){ e.stopPropagation(); delR(r.id); });
+    row.appendChild(del);
+  }
+  return row;
 }
 
 function renderIE(){ buildMF(); renderList(); }
@@ -2093,8 +2136,14 @@ function renderTui(){
   );
   const bySch={};filtered.forEach(t=>{const k=(t.category||inferCat(t.school||''))+'_'+(t.school||'其他');if(!bySch[k])bySch[k]={cat:t.category||inferCat(t.school||''),school:t.school||'其他',rows:[]};bySch[k].rows.push(t)});
   const el=document.getElementById('tList');if(!el)return;
+  const tuiSortEl=document.getElementById('tuiSort');
+  if(tuiSortEl) tuiSortEl.innerHTML=sortChips('tui',[
+    {v:'date_desc',l:'📅 日期新→舊'},{v:'date_asc',l:'日期舊→新'},
+    {v:'amt_desc',l:'💰 金額大→小'},{v:'amt_asc',l:'金額小→大'}
+  ]);
   if(!filtered.length){el.innerHTML='<div class="empty">尚無記錄</div>';return}
-  Object.values(bySch).forEach(g=>g.rows.sort((a,b)=>b.date.localeCompare(a.date)));
+  const tuiPref=sortPref.tui;
+  Object.values(bySch).forEach(g=>g.rows.sort((a,b)=>cmpBy(tuiPref, a.date,a.actual||a.total,null, b.date,b.actual||b.total,null)));
   el.innerHTML=Object.values(bySch).map(g=>{
     const cd=TCATS.find(c=>c.id===g.cat)||{label:CLBL[g.cat]||g.cat,icon:'📌',color:'var(--muted)'};
     const sT=g.rows.reduce((a,b)=>a+(b.actual||b.total||0),0),sS=g.rows.reduce((a,b)=>a+(b.subsidy||0),0);
@@ -2251,7 +2300,14 @@ function renderSav(){
   }).join('');
   const sl=[...savingsH].reverse();
   renderGrowthChart(sl);
-  document.getElementById('svHist').innerHTML=savingsH.map(s=>{
+  const savSortEl=document.getElementById('savSort');
+  if(savSortEl) savSortEl.innerHTML=sortChips('sav',[
+    {v:'date_desc',l:'📅 日期新→舊'},{v:'date_asc',l:'日期舊→新'},
+    {v:'amt_desc',l:'💰 總額大→小'},{v:'amt_asc',l:'總額小→大'}
+  ]);
+  const savPref=sortPref.sav;
+  const svHistSorted=[...savingsH].sort((a,b)=>cmpBy(savPref, a.date,a.total,null, b.date,b.total,null));
+  document.getElementById('svHist').innerHTML=svHistSorted.map(s=>{
     const bk=s.banks||{};
     const detail=BANKS.map(b=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0 3px 16px;color:var(--muted)"><span>${b}</span><span style="font-family:'DM Mono'">${fmt(bk[b]||0)}</span></div>`).join('');
     return `<div>
@@ -2348,13 +2404,21 @@ async function addSk(){
 }
 function renderSk(){
   const el=document.getElementById('skList');
+  const skSortEl=document.getElementById('skSort');
+  if(skSortEl) skSortEl.innerHTML=sortChips('sk',[
+    {v:'date_desc',l:'📅 日期新→舊'},{v:'date_asc',l:'日期舊→新'},
+    {v:'amt_desc',l:'💰 金額大→小'},{v:'amt_asc',l:'金額小→大'},
+    {v:'cat',l:'🏷 股票代號'}
+  ]);
   if(!stocks.length){el.innerHTML='<div class="empty">尚無記錄</div>';return}
   const tD=stocks.filter(s=>s.type==='dividend').reduce((a,b)=>a+b.dividend,0);
   document.getElementById('dTot').textContent='累計配息 '+fmt(tD);
   const codes={};stocks.forEach(s=>{if(!codes[s.code])codes[s.code]={name:s.name,cost:0,div:0};if(s.type==='buy')codes[s.code].cost+=s.total;if(s.type==='dividend')codes[s.code].div+=s.dividend});
+  const skPref=sortPref.sk;
+  const sortedTxns=[...stocks].sort((a,b)=>cmpBy(skPref, a.date,(a.type==='dividend'?a.dividend:a.total),a.code, b.date,(b.type==='dividend'?b.dividend:b.total),b.code));
   el.innerHTML=Object.entries(codes).map(([c,d])=>`<div style="background:var(--cream);border-radius:7px;padding:7px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center"><div><span class="scode">${c}</span><span style="font-size:12px;margin-left:6px">${d.name}</span></div><div style="text-align:right"><div style="font-size:10px;color:var(--muted)">成本 ${fmt(d.cost)}</div>${d.div?`<div style="font-size:10px;color:var(--inc)">+配息 ${fmt(d.div)}</div>`:''}</div></div>`).join('')+
     '<div style="font-size:9px;color:var(--muted);margin:7px 0 5px;text-transform:uppercase;letter-spacing:1px">明細</div>'+
-    stocks.map(s=>`<div class="skr"><div><span class="scode">${s.code}</span><div style="font-size:12px;margin-top:1px">${s.name}</div><div style="font-size:10px;color:var(--muted);font-family:'DM Mono'">${s.date}</div></div><div style="text-align:right">${s.type==='dividend'?`<div style="font-size:12px;color:var(--inc)">+配息 ${fmt(s.dividend)}</div>`:`<div style="font-family:'DM Mono';font-size:11px">${s.type==='buy'?'買':'賣'} @${s.price}x${s.shares}</div><div style="font-family:'DM Mono';font-size:11px;color:var(--muted)">${fmt(s.total)}</div>`}</div></div>`).join('');
+    sortedTxns.map(s=>`<div class="skr"><div><span class="scode">${s.code}</span><div style="font-size:12px;margin-top:1px">${s.name}</div><div style="font-size:10px;color:var(--muted);font-family:'DM Mono'">${s.date}</div></div><div style="text-align:right">${s.type==='dividend'?`<div style="font-size:12px;color:var(--inc)">+配息 ${fmt(s.dividend)}</div>`:`<div style="font-family:'DM Mono';font-size:11px">${s.type==='buy'?'買':'賣'} @${s.price}x${s.shares}</div><div style="font-family:'DM Mono';font-size:11px;color:var(--muted)">${fmt(s.total)}</div>`}</div></div>`).join('');
 }
 
 
@@ -2724,7 +2788,13 @@ async function delTui(child, id) {
 function renderSalWithSearch() {
   const q = (document.getElementById('salSrch')?.value||'').trim().toLowerCase();
   const el = document.getElementById('salYV');
+  const sortEl=document.getElementById('salSort');
+  if(sortEl) sortEl.innerHTML=sortChips('sal',[
+    {v:'date_desc',l:'📅 月份新→舊'},{v:'date_asc',l:'月份舊→新'},
+    {v:'amt_desc',l:'💰 金額大→小'},{v:'amt_asc',l:'金額小→大'}
+  ]);
   if(!salaries.length){ el.innerHTML='<div class="empty">尚無記錄</div>'; return; }
+  const pref=sortPref.sal;
   const bY = {};
   salaries.forEach(s=>{
     if(q) {
@@ -2736,7 +2806,12 @@ function renderSalWithSearch() {
     if(!bY[s.year]) bY[s.year]=[];
     bY[s.year].push(s);
   });
-  el.innerHTML = Object.keys(bY).sort((a,b)=>b-a).map(y=>{
+  Object.values(bY).forEach(arr=>arr.sort((a,b)=>{
+    const dA=a.year+'-'+String(a.month).padStart(2,'0'), dB=b.year+'-'+String(b.month).padStart(2,'0');
+    return cmpBy(pref, dA,a.total,null, dB,b.total,null);
+  }));
+  const yrOrder=Object.keys(bY).sort((a,b)=>pref==='date_asc'?a-b:b-a);
+  el.innerHTML = yrOrder.map(y=>{
     const its=bY[y], yt=its.reduce((a,b)=>a+b.total,0);
     return`<div class="card"><div class="yr-sum"><b>${y}年</b> 年薪 <b>${fmt(yt)}</b></div>
       ${its.map(s=>`<div class="salc">
@@ -2892,7 +2967,29 @@ function renderInvest() {
 
   let totalCost = 0, totalVal = 0, totalDiv = 0;
 
-  const cards = invData.map(s => {
+  const hdSortEl=document.getElementById('invSort');
+  if(hdSortEl) hdSortEl.innerHTML=sortChips('hd',[
+    {v:'code_asc',l:'🏷 股票代號'},{v:'cost_desc',l:'💰 持有成本大→小'},
+    {v:'val_desc',l:'📈 市值大→小'},{v:'pnl_desc',l:'損益大→小'}
+  ]);
+  const hdPref=sortPref.hd;
+  const sortedInv=[...invData].sort((a,b)=>{
+    if(hdPref==='cost_desc') return b.total_cost-a.total_cost;
+    if(hdPref==='val_desc'){
+      const pa=stockPrices[a.code],pb=stockPrices[b.code];
+      const va=pa?pa*a.total_shares:0, vb=pb?pb*b.total_shares:0;
+      return vb-va;
+    }
+    if(hdPref==='pnl_desc'){
+      const pa=stockPrices[a.code],pb=stockPrices[b.code];
+      const pnlA=pa?(pa*a.total_shares-a.total_cost):-Infinity;
+      const pnlB=pb?(pb*b.total_shares-b.total_cost):-Infinity;
+      return pnlB-pnlA;
+    }
+    return (a.code||'').localeCompare(b.code||'');
+  });
+
+  const cards = sortedInv.map(s => {
     const price = stockPrices[s.code];
     const mktVal = price ? price * s.total_shares : null;
     const pnl    = mktVal ? mktVal - s.total_cost : null;
