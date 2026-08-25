@@ -518,6 +518,88 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     </div>
   </div>
 </div>
+
+<!-- 財務規劃 -->
+<div class="pg" id="pg-plan">
+  <div class="ttl">財務規劃</div>
+  <div class="sub" id="planLastUpdate">分析中…</div>
+
+  <div class="strip">
+    <div class="sb"><div class="sl">月均收入</div><div class="sv inc" id="planAvgInc">—</div></div>
+    <div class="sb"><div class="sl">月均支出</div><div class="sv exp" id="planAvgExp">—</div></div>
+    <div class="sb"><div class="sl">儲蓄率</div><div class="sv bal" id="planSavRate">—</div></div>
+  </div>
+
+  <!-- 收支趨勢 -->
+  <div class="card">
+    <div class="ct fb" style="flex-direction:row;gap:0">
+      <span>📈 12個月收支趨勢</span>
+      <span style="display:flex;gap:8px;margin-left:auto;align-items:center">
+        <span style="font-size:9px;color:var(--inc)">▪ 收入</span>
+        <span style="font-size:9px;color:var(--exp)">▪ 支出</span>
+      </span>
+    </div>
+    <div id="planBarsChart" style="margin-top:6px"></div>
+  </div>
+
+  <!-- 收支分佈並排 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div class="card" style="padding:10px 8px">
+      <div class="ct" style="font-size:11px;margin-bottom:8px">💰 收入分佈</div>
+      <div style="display:flex;justify-content:center;margin-bottom:6px"><div id="planIncDonut"></div></div>
+      <div id="planIncLegend"></div>
+    </div>
+    <div class="card" style="padding:10px 8px">
+      <div class="ct" style="font-size:11px;margin-bottom:8px">💸 支出分佈</div>
+      <div style="display:flex;justify-content:center;margin-bottom:6px"><div id="planExpDonut"></div></div>
+      <div id="planExpLegend"></div>
+    </div>
+  </div>
+
+  <!-- 資產快照 -->
+  <div class="card">
+    <div class="ct fb" style="flex-direction:row;gap:0">
+      <span>🏦 資產快照</span>
+      <button onclick="openPlanAssetsModal()" style="font-size:10px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--paper);cursor:pointer;margin-left:auto;font-family:'Noto Serif TC',serif">✏️ 更新</button>
+    </div>
+    <div class="strip" style="margin-top:8px">
+      <div class="sb"><div class="sl">總資產</div><div class="sv bal" id="planTotalAssets">—</div></div>
+      <div class="sb"><div class="sl">存款</div><div class="sv inc" id="planBankSav">—</div></div>
+      <div class="sb"><div class="sl">投資市值</div><div class="sv gld" id="planInvVal">—</div></div>
+    </div>
+  </div>
+
+  <!-- 退休規劃 -->
+  <div class="card">
+    <div class="ct">🎯 退休規劃試算</div>
+    <div style="background:var(--cream);border-radius:9px;padding:10px 13px;margin-bottom:8px">
+      <div class="fb">
+        <span style="font-size:11px;color:var(--muted)" id="planRetireYrs">—</span>
+        <span id="planRetireStatus" style="font-size:11px;font-weight:600"></span>
+      </div>
+      <div style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:4px">
+          <span>退休資金達成進度</span>
+          <span id="planRetireCorpus">—</span>
+        </div>
+        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div id="planRetireProgress" style="height:100%;background:var(--inc);border-radius:4px;width:0%;transition:width .8s ease"></div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);padding:0 2px">建議每月投入：<span id="planRetirePMT" style="font-family:'DM Mono';color:var(--inc);font-weight:700;font-size:14px">—</span></div>
+    <div style="font-size:10px;color:var(--muted);margin-top:5px;padding:0 2px;line-height:1.7">* 假設投資年化報酬率 6-7%，退休後生活 25 年。<br>年齡與資產可點「✏️ 更新」調整。</div>
+  </div>
+
+  <!-- 財務分析 -->
+  <div class="card">
+    <div class="ct">💡 財務分析</div>
+    <div id="planInsights"></div>
+  </div>
+
+  <div style="height:8px"></div>
+</div>
+
 </div>
 
 <nav class="bnav">
@@ -528,6 +610,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <button class="bnt" id="bn-salary" onclick="go('salary',this)"><span class="bnt-ic">📋</span>薪資</button>
   <button class="bnt" id="bn-invest" onclick="go('invest',this)"><span class="bnt-ic">📈</span>投資</button>
   <button class="bnt" id="bn-assets" onclick="go('assets',this)"><span class="bnt-ic">🏦</span>資產</button>
+  <button class="bnt" id="bn-plan" onclick="go('plan',this)"><span class="bnt-ic">🎯</span>財務規劃</button>
 </nav>
 
 <!-- 快速記帳 Modal -->
@@ -1525,7 +1608,7 @@ function go(id, btn) {
   document.getElementById('pg-'+id).classList.add('on');
   document.getElementById('bn-'+id).classList.add('on');
   curPg = id;
-  ({dash:renderDash,ie:renderIE,analysis:renderAna,salary:renderSal,kids:renderKids,invest:renderInvest,assets:renderAssets})[id]?.();
+  ({dash:renderDash,ie:renderIE,analysis:renderAna,salary:renderSal,kids:renderKids,invest:renderInvest,assets:renderAssets,plan:renderPlan})[id]?.();
 }
 
 function renderAll() {
@@ -1535,6 +1618,7 @@ function renderAll() {
   else if(curPg==='salary') renderSal();
   else if(curPg==='kids') renderKids();
   else if(curPg==='assets') renderAssets();
+  else if(curPg==='plan') renderPlan();
 }
 
 // ══ 快速記帳 ══
@@ -3370,6 +3454,220 @@ async function submitSubsidyQuick() {
 }
 
 // ══ 啟動 ══
+// ══════════════════════════════════════════
+//  財務規劃頁
+// ══════════════════════════════════════════
+let _planAssets = null;
+
+function loadPlanAssets() {
+  if(_planAssets) return _planAssets;
+  try { _planAssets = JSON.parse(localStorage.getItem('plan_assets')||'{}'); }
+  catch(e) { _planAssets = {}; }
+  if(!_planAssets.age) _planAssets.age = 35;
+  if(!_planAssets.retireAge) _planAssets.retireAge = 65;
+  // Auto-fill banks from latest savings snapshot if not yet stored
+  if(!_planAssets.banks || !Object.keys(_planAssets.banks).length) {
+    const snap = savingsH && savingsH[0];
+    _planAssets.banks = snap ? {...(snap.banks||{})} : {};
+  }
+  // Auto-fill investment from stocks holdings if not set
+  if(!_planAssets.invValue) {
+    _planAssets.invValue = (stocks||[]).reduce((s,sk)=>{
+      let sh=0;
+      (sk.transactions||[]).forEach(t=>{ if(t.type==='buy') sh+=(t.shares||0); else if(t.type==='sell') sh-=(t.shares||0); });
+      return s + (sk.currentPrice||sk.price||0)*Math.max(0,sh);
+    },0);
+  }
+  return _planAssets;
+}
+
+function _savePlanAssets() {
+  try { localStorage.setItem('plan_assets', JSON.stringify(_planAssets)); } catch(e) {}
+}
+
+function checkPlanReminder() {
+  const last = localStorage.getItem('plan_reminder_ts');
+  const QUARTER_MS = 90*24*3600*1000;
+  if(!last || Date.now()-parseInt(last) > QUARTER_MS) {
+    setTimeout(()=>{ const m=document.getElementById('planReminderModal'); if(m) m.classList.add('on'); }, 1800);
+  }
+}
+
+function dismissPlanReminder() {
+  localStorage.setItem('plan_reminder_ts', String(Date.now()));
+  const m = document.getElementById('planReminderModal');
+  if(m) m.classList.remove('on');
+}
+
+function openPlanAssetsModal() {
+  const pa = loadPlanAssets();
+  const snap = savingsH && savingsH[0];
+  const snapBanks = snap?.banks||{};
+  const stored = pa.banks||{};
+  const bankKeys = [...new Set([...Object.keys(snapBanks),...Object.keys(stored)])];
+  if(!bankKeys.length) bankKeys.push('玉山銀行','其他');
+  document.getElementById('planBankInputs').innerHTML = bankKeys.map(b=>{
+    const v = stored[b]!=null ? stored[b] : (snapBanks[b]||'');
+    return `<div style="display:flex;align-items:center;background:var(--paper);border-radius:8px;border:1px solid var(--border);padding:7px 10px;gap:8px;margin-bottom:6px">
+      <span style="font-size:12px;flex:1;color:var(--muted)">${b}</span>
+      <input type="number" inputmode="numeric" data-bank="${b}" value="${v}" placeholder="0" class="plan-bank-input"
+        style="width:120px;border:none;background:transparent;font-family:'DM Mono';font-size:14px;text-align:right;color:var(--ink);outline:none"></div>`;
+  }).join('');
+  document.getElementById('planInvInput').value = pa.invValue||'';
+  document.getElementById('planAgeInput').value = pa.age||35;
+  document.getElementById('planRetireAgeInput').value = pa.retireAge||65;
+  document.getElementById('planAssetsModal').classList.add('on');
+}
+
+function savePlanAssetsModal() {
+  const pa = loadPlanAssets();
+  const banks={};
+  document.querySelectorAll('.plan-bank-input').forEach(el=>{
+    const k=el.getAttribute('data-bank'), v=parseFloat(el.value);
+    if(k && !isNaN(v)) banks[k]=v;
+  });
+  pa.banks=banks;
+  pa.invValue=parseFloat(document.getElementById('planInvInput').value)||0;
+  pa.age=parseInt(document.getElementById('planAgeInput').value)||35;
+  pa.retireAge=parseInt(document.getElementById('planRetireAgeInput').value)||65;
+  _savePlanAssets();
+  document.getElementById('planAssetsModal').classList.remove('on');
+  _planAssets=null;
+  renderPlan();
+  toast('✅ 資產資料已更新');
+}
+
+function renderPlan() {
+  _planAssets=null;
+  const pa = loadPlanAssets();
+  const now = new Date();
+  const toYM = (y,m)=>`${y}-${m<10?'0'+m:m}`;
+
+  // 建立近12個月清單
+  const months=[];
+  for(let i=11;i>=0;i--){
+    const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push(toYM(d.getFullYear(), d.getMonth()+1));
+  }
+  const mSet=new Set(months);
+
+  // 彙整月份收支
+  const byM={};
+  months.forEach(m=>{ byM[m]={inc:0,exp:0}; });
+  const incCats={}, expCats={};
+  (records||[]).forEach(r=>{
+    const m=(r.date||'').substring(0,7);
+    if(!mSet.has(m)) return;
+    const amt=r.amount||0, cat=r.cat||'未分類';
+    if(r.type==='income'){ byM[m].inc+=amt; incCats[cat]=(incCats[cat]||0)+amt; }
+    else if(r.type==='expense'){ byM[m].exp+=amt; expCats[cat]=(expCats[cat]||0)+amt; }
+  });
+
+  // 平均（排除當月）
+  const pastMs=months.slice(0,-1), n=pastMs.length||1;
+  const avgInc=pastMs.reduce((s,m)=>s+byM[m].inc,0)/n;
+  const avgExp=pastMs.reduce((s,m)=>s+byM[m].exp,0)/n;
+  const avgSav=avgInc-avgExp;
+  const savRate=avgInc>0 ? avgSav/avgInc*100 : 0;
+
+  // 資產
+  const bankTotal=Object.values(pa.banks||{}).reduce((s,v)=>s+(+v||0),0);
+  const invTotal=pa.invValue||0;
+  const totalAssets=bankTotal+invTotal;
+
+  // 退休試算
+  const age=pa.age||35, retireAge=pa.retireAge||65;
+  const yrs=Math.max(retireAge-age,1);
+  const monthlyExp=avgExp||30000;
+  const corpus=monthlyExp*12*25;
+  const Rmo=0.06/12, N=yrs*12;
+  const fvFactor=(Math.pow(1+Rmo,N)-1)/Rmo;
+  const fvAssets=bankTotal*Math.pow(1.06,yrs)+invTotal*Math.pow(1.07,yrs);
+  const pmt=Math.max(0,(corpus-fvAssets)/fvFactor);
+  const progress=Math.min(100, fvAssets/corpus*100);
+
+  const fmt=v=>'$'+Math.round(v).toLocaleString();
+  const fmtK=v=>v>=10000?(v/10000).toFixed(0)+'萬':Math.round(v).toLocaleString();
+
+  // 填入數字
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+  set('planAvgInc', fmt(avgInc));
+  set('planAvgExp', fmt(avgExp));
+  set('planSavRate', savRate.toFixed(1)+'%');
+  set('planTotalAssets', fmt(totalAssets));
+  set('planBankSav', fmt(bankTotal));
+  set('planInvVal', fmt(invTotal));
+  set('planRetireCorpus', fmtK(corpus)+'元');
+  set('planRetirePMT', fmt(pmt)+'/月');
+  set('planRetireStatus', fvAssets>=corpus*0.5?'🟢 進度良好':'🟡 需加強儲蓄');
+  set('planRetireYrs', yrs+'年後退休（'+age+'→'+retireAge+'歲）');
+  set('planLastUpdate', '近12個月：'+months[0]+' ~ '+months[11]);
+  setTimeout(()=>{ const pb=document.getElementById('planRetireProgress'); if(pb) pb.style.width=progress.toFixed(1)+'%'; },60);
+
+  // 圖表
+  drawPlanBars(months,byM);
+  const COLS=['#4a7fa5','#3a7a5a','#c9a84c','#c0532a','#5a7a6a','#7c5a9a','#4a9a7a','#9a5a3a'];
+  const topInc=Object.entries(incCats).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const topExp=Object.entries(expCats).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const totI=topInc.reduce((s,[,v])=>s+v,0)||1;
+  const totE=topExp.reduce((s,[,v])=>s+v,0)||1;
+  drawPlanDonut('planIncDonut', topInc.map(([n,v],i)=>({n,v,c:COLS[i]})));
+  drawPlanDonut('planExpDonut', topExp.map(([n,v],i)=>({n,v,c:COLS[i]})));
+
+  const mkLegend=(items,tot)=>items.map(([n,v],i)=>
+    `<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+       <span style="width:7px;height:7px;border-radius:50%;background:${COLS[i]};flex-shrink:0;display:inline-block"></span>
+       <span style="font-size:10px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</span>
+       <span style="font-family:'DM Mono';font-size:10px">${(v/tot*100).toFixed(0)}%</span>
+     </div>`).join('');
+  const il=document.getElementById('planIncLegend'); if(il) il.innerHTML=mkLegend(topInc,totI);
+  const el=document.getElementById('planExpLegend'); if(el) el.innerHTML=mkLegend(topExp,totE);
+
+  // 財務分析
+  const insights=[];
+  if(savRate>=30) insights.push({i:'🟢',t:`儲蓄率 ${savRate.toFixed(1)}%，表現優異！建議持續定期定額投入ETF。`});
+  else if(savRate>=20) insights.push({i:'🟡',t:`儲蓄率 ${savRate.toFixed(1)}%，尚可。建議提升至30%以上。`});
+  else insights.push({i:'🔴',t:`儲蓄率 ${savRate.toFixed(1)}%，偏低。建議檢視最大支出，尋找節流空間。`});
+  if(topExp.length){ const [en,ev]=topExp[0]; insights.push({i:'💡',t:`最大支出：${en}（近12個月月均 ${fmt(ev/12)}）`}); }
+  if(pmt>0 && pmt<=avgSav) insights.push({i:'🚀',t:`月均可存 ${fmt(avgSav)}，已超過退休所需 ${fmt(pmt)}/月，照此進度可達目標！`});
+  else if(pmt>0 && pmt>avgSav) insights.push({i:'⚠️',t:`退休缺口尚存。建議每月增加儲蓄約 ${fmt(pmt-avgSav)}，或提高投資報酬率。`});
+  if(totalAssets>0 && invTotal<bankTotal*0.5) insights.push({i:'📊',t:`投資佔比 ${(invTotal/totalAssets*100).toFixed(0)}%，存款過多易受通膨侵蝕，考慮將部分存款轉入ETF。`});
+  const ig=document.getElementById('planInsights');
+  if(ig) ig.innerHTML=insights.map(x=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--border)"><span style="font-size:15px;flex-shrink:0">${x.i}</span><span style="font-size:12px;line-height:1.7">${x.t}</span></div>`).join('');
+}
+
+function drawPlanBars(months,byM) {
+  const el=document.getElementById('planBarsChart'); if(!el) return;
+  const W=320,H=110,padL=4,padR=4,padB=16,padT=4;
+  const chartH=H-padB-padT, chartW=W-padL-padR;
+  const maxV=Math.max(...months.map(m=>Math.max(byM[m].inc,byM[m].exp)),1);
+  const n=months.length, slotW=chartW/n;
+  const bw=Math.max(4,slotW*0.32), gap=2;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">`;
+  months.forEach((m,i)=>{
+    const cx=padL+i*slotW+slotW/2;
+    const ih=Math.max(1,byM[m].inc/maxV*chartH), eh=Math.max(1,byM[m].exp/maxV*chartH);
+    svg+=`<rect x="${(cx-bw-gap/2).toFixed(1)}" y="${(padT+chartH-ih).toFixed(1)}" width="${bw.toFixed(1)}" height="${ih.toFixed(1)}" rx="2" fill="var(--inc)" opacity=".8"/>`;
+    svg+=`<rect x="${(cx+gap/2).toFixed(1)}" y="${(padT+chartH-eh).toFixed(1)}" width="${bw.toFixed(1)}" height="${eh.toFixed(1)}" rx="2" fill="var(--exp)" opacity=".8"/>`;
+    if(i%2===0||n<=6) svg+=`<text x="${cx.toFixed(1)}" y="${H-2}" text-anchor="middle" font-size="7.5" fill="var(--muted)" font-family="DM Mono">${m.substring(5)}</text>`;
+  });
+  svg+=`</svg>`; el.innerHTML=svg;
+}
+
+function drawPlanDonut(id,cats) {
+  const el=document.getElementById(id); if(!el) return;
+  const SZ=110,cx=55,cy=55,R=38,sw=13, circ=2*Math.PI*R;
+  const total=cats.reduce((s,c)=>s+c.v,0)||1;
+  let off=circ/4, svg=`<svg viewBox="0 0 ${SZ} ${SZ}" style="width:${SZ}px;height:${SZ}px;display:block">`;
+  svg+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--cream)" stroke-width="${sw}"/>`;
+  cats.forEach(c=>{
+    const dash=c.v/total*circ;
+    svg+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${c.c}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(circ-dash).toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/>`;
+    off-=dash;
+  });
+  svg+=`</svg>`; el.innerHTML=svg;
+}
+
 (function init() {
   // 初始日期
   const now = new Date();
@@ -3384,7 +3682,7 @@ async function submitSubsidyQuick() {
   if(typeof buildTDF==='function') buildTDF();
 
   // modal 點背景關閉
-  ['qModal','eModal','rModal','tuiEditModal','batchModal','tuiQuickModal'].forEach(id=>{
+  ['qModal','eModal','rModal','tuiEditModal','batchModal','tuiQuickModal','planAssetsModal','planReminderModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.addEventListener('click',function(ev){if(ev.target===el)el.classList.remove('on');});
   });
@@ -3395,6 +3693,9 @@ async function submitSubsidyQuick() {
   if(typeof renderSalWithSearch==='function') renderSalWithSearch();
   if(typeof renderTui==='function') renderTui();
   if(typeof renderHB==='function') renderHB();
+
+  // 財務規劃：季度提醒檢查
+  if(typeof checkPlanReminder==='function') checkPlanReminder();
 
   // 背景從 GS 載入最新資料（帶 timeout）
   setSyncStatus('loading','連線中…');
@@ -3414,5 +3715,47 @@ async function submitSubsidyQuick() {
 })();
 
 </script>
+
+<!-- 財務規劃：資產更新 Modal -->
+<div class="modal-bg" id="planAssetsModal">
+  <div class="modal">
+    <div class="modal-ttl">🏦 更新資產資訊
+      <button class="modal-x" onclick="document.getElementById('planAssetsModal').classList.remove('on')">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">儲存後自動重算退休規劃</div>
+    <div class="fr2 fr">
+      <div><label class="fl">目前年齡</label><input class="fi" type="number" id="planAgeInput" inputmode="numeric" placeholder="35"></div>
+      <div><label class="fl">目標退休年齡</label><input class="fi" type="number" id="planRetireAgeInput" inputmode="numeric" placeholder="65"></div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--muted);margin:6px 0 4px">🏦 各帳戶存款餘額</div>
+    <div id="planBankInputs"></div>
+    <div class="fr" style="margin-top:6px">
+      <label class="fl">📈 投資市值合計（股票、ETF）</label>
+      <input class="fi" type="number" id="planInvInput" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="fr2" style="margin-top:4px">
+      <button class="sbtn sec" onclick="document.getElementById('planAssetsModal').classList.remove('on')">取消</button>
+      <button class="sbtn" onclick="savePlanAssetsModal()">儲存並更新</button>
+    </div>
+  </div>
+</div>
+
+<!-- 財務規劃：季度提醒 Modal -->
+<div class="modal-bg" id="planReminderModal">
+  <div class="modal">
+    <div class="modal-ttl">🔔 財務規劃定期提醒
+      <button class="modal-x" onclick="dismissPlanReminder()">✕</button>
+    </div>
+    <div style="font-size:13px;color:var(--ink);margin-bottom:12px;line-height:1.8">
+      距上次更新已超過 <b>90 天</b>。<br>
+      建議更新各銀行存款餘額與投資市值，讓退休試算更準確。
+    </div>
+    <div class="fr2">
+      <button class="sbtn sec" onclick="dismissPlanReminder()">稍後再說</button>
+      <button class="sbtn" onclick="dismissPlanReminder();go('plan',document.getElementById('bn-plan'));openPlanAssetsModal()">立即更新</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
