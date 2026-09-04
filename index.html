@@ -282,6 +282,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <label class="sal-item"><input type="checkbox" id="ck_advance" onchange="toggleSalItem('advance')"> 💳 代墊</label>
         <label class="sal-item"><input type="checkbox" id="ck_overseas" onchange="toggleSalItem('overseas')"> 🌏 國外出差</label>
         <label class="sal-item"><input type="checkbox" id="ck_domestic" onchange="toggleSalItem('domestic')"> 🚗 國內出差</label>
+        <label class="sal-item"><input type="checkbox" id="ck_bonus2" onchange="toggleSalItem('bonus2')"> 💎 分紅</label>
+        <label class="sal-item"><input type="checkbox" id="ck_yearend" onchange="toggleSalItem('yearend')"> 🧧 年終獎金</label>
         <label class="sal-item"><input type="checkbox" id="ck_fa" onchange="toggleSalItem('fa')"> ⭐ 全勤</label>
         <label class="sal-item"><input type="checkbox" id="ck_other" onchange="toggleSalItem('other')"> 📝 其他</label>
       </div>
@@ -303,6 +305,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <div class="fr2 fr">
         <div id="f_overseas" style="display:none"><label class="fl">🌏 國外出差</label><input class="fi" type="number" id="sOverseas" placeholder="0" inputmode="numeric" oninput="calcS()"></div>
         <div id="f_domestic" style="display:none"><label class="fl">🚗 國內出差</label><input class="fi" type="number" id="sDomestic" placeholder="0" inputmode="numeric" oninput="calcS()"></div>
+      </div>
+      <div class="fr2 fr">
+        <div id="f_bonus2" style="display:none"><label class="fl">💎 分紅</label><input class="fi" type="number" id="sBonus2" placeholder="0" inputmode="numeric" oninput="calcS()"></div>
+        <div id="f_yearend" style="display:none"><label class="fl">🧧 年終獎金</label><input class="fi" type="number" id="sYearEnd" placeholder="0" inputmode="numeric" oninput="calcS()"></div>
       </div>
       <div class="fr2 fr">
         <div id="f_fa" style="display:none"><label class="fl">⭐ 全勤</label><input class="fi" type="number" id="sFA" value="1000" inputmode="numeric" oninput="calcS()"></div>
@@ -2046,11 +2052,11 @@ function toggleSalItem(key) {
   calcS();
 }
 
-function calcS(){const v=id=>parseFloat(document.getElementById(id)?.value)||0;const el=document.getElementById('sCalc');if(el)el.textContent=fmt(v('sB')+v('sBn')+v('sOT')+v('sMl')+v('sRe')+v('sFA')+v('sTravel')+v('sOverseas')+v('sDomestic')+v('sOth'));}
+function calcS(){const v=id=>parseFloat(document.getElementById(id)?.value)||0;const el=document.getElementById('sCalc');if(el)el.textContent=fmt(v('sB')+v('sBn')+v('sOT')+v('sMl')+v('sRe')+v('sFA')+v('sTravel')+v('sOverseas')+v('sDomestic')+v('sBonus2')+v('sYearEnd')+v('sOth'));}
 async function addSal(){
   const v=id=>parseFloat(document.getElementById(id)?.value)||0;
   const items=[];
-  const fmap={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sFA:'全勤'};
+  const fmap={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sBonus2:'分紅',sYearEnd:'年終獎金',sFA:'全勤'};
   Object.entries(fmap).forEach(([id,l])=>{const vv=v(id);if(vv)items.push({label:l,amount:vv})});
   const ov=v('sOth'),on=(document.getElementById('sNote')?.value||'').trim();
   if(ov)items.push({label:on||'其他',amount:ov});
@@ -2104,7 +2110,7 @@ function cancelEditSal(){
   editSalId = null;
   const btn=document.querySelector('#pg-salary .sbtn'); if(btn) btn.textContent='儲存薪資';
   const cancelBtn=document.getElementById('salCancelBtn'); if(cancelBtn) cancelBtn.style.display='none';
-  ['sB','sBn','sOT','sMl','sTravel','sRe','sOverseas','sDomestic','sFA','sOth','sNote'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  ['sB','sBn','sOT','sMl','sTravel','sRe','sOverseas','sDomestic','sBonus2','sYearEnd','sFA','sOth','sNote'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
   calcS();
 }
 function toggleSalDetail(id){
@@ -3012,7 +3018,7 @@ function renderSalWithSearch() {
           </div>
         </div>
         <div id="sal-detail-${s.id}" style="display:none;flex-wrap:wrap;gap:3px">
-          ${s.items.map(it=>{const hi=['薪資','節金','全勤','代墊','出差','差旅','午餐','晚餐','國外'].some(k=>it.label.includes(k));const lo=['勞保','健保'].some(k=>it.label.includes(k));return`<span class="stag ${hi?'hi':lo?'lo':''}">${it.label} ${fmt(it.amount)}</span>`}).join('')}
+          ${s.items.map(it=>{const hi=['薪資','節金','全勤','代墊','出差','差旅','午餐','晚餐','國外','分紅','年終'].some(k=>it.label.includes(k));const lo=['勞保','健保'].some(k=>it.label.includes(k));return`<span class="stag ${hi?'hi':lo?'lo':''}">${it.label} ${fmt(it.amount)}</span>`}).join('')}
         </div>
       </div>`).join('')}
     </div>`;
@@ -3029,8 +3035,8 @@ function openEditSal(id) {
   if(yr) yr.value=s.year;
   if(mo) mo.value=s.month;
   // 填各項明細（label 需與 addSal() 的 fmap 完全一致，否則門禁/午餐/差旅補助/國外出差/國內出差會被漏掉）
-  const map={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sFA:'全勤'};
-  const ckMap={sB:'ck_sal',sBn:'ck_bonus',sOT:'ck_gate',sMl:'ck_lunch',sTravel:'ck_travel',sRe:'ck_advance',sOverseas:'ck_overseas',sDomestic:'ck_domestic',sFA:'ck_fa'};
+  const map={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sBonus2:'分紅',sYearEnd:'年終獎金',sFA:'全勤'};
+  const ckMap={sB:'ck_sal',sBn:'ck_bonus',sOT:'ck_gate',sMl:'ck_lunch',sTravel:'ck_travel',sRe:'ck_advance',sOverseas:'ck_overseas',sDomestic:'ck_domestic',sBonus2:'ck_bonus2',sYearEnd:'ck_yearend',sFA:'ck_fa'};
   Object.entries(map).forEach(([id2,l])=>{
     const el=document.getElementById(id2); if(!el)return;
     const item=s.items.find(it=>it.label===l);
