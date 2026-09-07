@@ -284,7 +284,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <label class="sal-item"><input type="checkbox" id="ck_domestic" onchange="toggleSalItem('domestic')"> 🚗 國內出差</label>
         <label class="sal-item"><input type="checkbox" id="ck_bonus2" onchange="toggleSalItem('bonus2')"> 💎 分紅</label>
         <label class="sal-item"><input type="checkbox" id="ck_yearend" onchange="toggleSalItem('yearend')"> 🧧 年終獎金</label>
-        <label class="sal-item"><input type="checkbox" id="ck_fa" onchange="toggleSalItem('fa')"> ⭐ 全勤</label>
         <label class="sal-item"><input type="checkbox" id="ck_other" onchange="toggleSalItem('other')"> 📝 其他</label>
       </div>
     </div>
@@ -311,7 +310,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <div id="f_yearend" style="display:none"><label class="fl">🧧 年終獎金</label><input class="fi" type="number" id="sYearEnd" placeholder="0" inputmode="numeric" oninput="calcS()"></div>
       </div>
       <div class="fr2 fr">
-        <div id="f_fa" style="display:none"><label class="fl">⭐ 全勤</label><input class="fi" type="number" id="sFA" value="1000" inputmode="numeric" oninput="calcS()"></div>
         <div id="f_other" style="display:none">
           <label class="fl">📝 其他說明</label><input class="fi" type="text" id="sNote">
           <label class="fl" style="margin-top:6px">其他金額</label><input class="fi" type="number" id="sOth" placeholder="0" inputmode="numeric" oninput="calcS()">
@@ -2039,6 +2037,9 @@ function dlReport(){
 }
 
 // ══ 薪資 ══
+// 各金額欄位對應的 checkbox id，calcS()/addSal() 都要用這個判斷「有勾選才算」，
+// 否則欄位裡殘留的舊值（即使被隱藏）還是會被誤加總進去
+const SAL_CK_MAP = {sB:'ck_sal',sBn:'ck_bonus',sOT:'ck_gate',sMl:'ck_lunch',sTravel:'ck_travel',sRe:'ck_advance',sOverseas:'ck_overseas',sDomestic:'ck_domestic',sBonus2:'ck_bonus2',sYearEnd:'ck_yearend'};
 function initSalYrs(){const s=document.getElementById('salYr');const c=new Date().getFullYear();for(let y=c+1;y>=2021;y--)s.innerHTML+=`<option ${y===c?'selected':''}>${y}</option>`}
 function toggleSalItem(key) {
   const el = document.getElementById('f_'+key);
@@ -2052,11 +2053,23 @@ function toggleSalItem(key) {
   calcS();
 }
 
-function calcS(){const v=id=>parseFloat(document.getElementById(id)?.value)||0;const el=document.getElementById('sCalc');if(el)el.textContent=fmt(v('sB')+v('sBn')+v('sOT')+v('sMl')+v('sRe')+v('sFA')+v('sTravel')+v('sOverseas')+v('sDomestic')+v('sBonus2')+v('sYearEnd')+v('sOth'));}
+function calcS(){
+  const v=id=>{
+    const ckId = SAL_CK_MAP[id];
+    if(ckId){ const ck=document.getElementById(ckId); if(ck && !ck.checked) return 0; }
+    return parseFloat(document.getElementById(id)?.value)||0;
+  };
+  const el=document.getElementById('sCalc');
+  if(el)el.textContent=fmt(v('sB')+v('sBn')+v('sOT')+v('sMl')+v('sRe')+v('sTravel')+v('sOverseas')+v('sDomestic')+v('sBonus2')+v('sYearEnd')+v('sOth'));
+}
 async function addSal(){
-  const v=id=>parseFloat(document.getElementById(id)?.value)||0;
+  const v=id=>{
+    const ckId = SAL_CK_MAP[id];
+    if(ckId){ const ck=document.getElementById(ckId); if(ck && !ck.checked) return 0; }
+    return parseFloat(document.getElementById(id)?.value)||0;
+  };
   const items=[];
-  const fmap={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sBonus2:'分紅',sYearEnd:'年終獎金',sFA:'全勤'};
+  const fmap={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sBonus2:'分紅',sYearEnd:'年終獎金'};
   Object.entries(fmap).forEach(([id,l])=>{const vv=v(id);if(vv)items.push({label:l,amount:vv})});
   const ov=v('sOth'),on=(document.getElementById('sNote')?.value||'').trim();
   if(ov)items.push({label:on||'其他',amount:ov});
@@ -2110,7 +2123,7 @@ function cancelEditSal(){
   editSalId = null;
   const btn=document.querySelector('#pg-salary .sbtn'); if(btn) btn.textContent='儲存薪資';
   const cancelBtn=document.getElementById('salCancelBtn'); if(cancelBtn) cancelBtn.style.display='none';
-  ['sB','sBn','sOT','sMl','sTravel','sRe','sOverseas','sDomestic','sBonus2','sYearEnd','sFA','sOth','sNote'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  ['sB','sBn','sOT','sMl','sTravel','sRe','sOverseas','sDomestic','sBonus2','sYearEnd','sOth','sNote'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
   calcS();
 }
 function toggleSalDetail(id){
@@ -3035,8 +3048,8 @@ function openEditSal(id) {
   if(yr) yr.value=s.year;
   if(mo) mo.value=s.month;
   // 填各項明細（label 需與 addSal() 的 fmap 完全一致，否則門禁/午餐/差旅補助/國外出差/國內出差會被漏掉）
-  const map={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sBonus2:'分紅',sYearEnd:'年終獎金',sFA:'全勤'};
-  const ckMap={sB:'ck_sal',sBn:'ck_bonus',sOT:'ck_gate',sMl:'ck_lunch',sTravel:'ck_travel',sRe:'ck_advance',sOverseas:'ck_overseas',sDomestic:'ck_domestic',sBonus2:'ck_bonus2',sYearEnd:'ck_yearend',sFA:'ck_fa'};
+  const map={sB:'薪資',sBn:'節金',sOT:'門禁',sMl:'午餐',sTravel:'差旅補助',sRe:'代墊',sOverseas:'國外出差',sDomestic:'國內出差',sBonus2:'分紅',sYearEnd:'年終獎金'};
+  const ckMap={sB:'ck_sal',sBn:'ck_bonus',sOT:'ck_gate',sMl:'ck_lunch',sTravel:'ck_travel',sRe:'ck_advance',sOverseas:'ck_overseas',sDomestic:'ck_domestic',sBonus2:'ck_bonus2',sYearEnd:'ck_yearend'};
   Object.entries(map).forEach(([id2,l])=>{
     const el=document.getElementById(id2); if(!el)return;
     const item=s.items.find(it=>it.label===l);
@@ -3102,20 +3115,28 @@ function openSalQuick() {
 // ══ 投資頁 ══
 let stockPrices = {};  // code -> 即時價格
 
+// 瀏覽器直接呼叫 Yahoo/TWSE 的股價 API 會被瀏覽器 CORS 政策擋下（尤其 Yahoo 近期對 v7 quote API
+// 收得更緊），造成 fetch 直接失敗、stockPrices 永遠是空物件，每支股票的市值/損益/報酬率就會一直顯示空白。
+// 這裡透過公開的 CORS 代理服務轉發請求來繞過瀏覽器端限制。
+const CORS_PROXY = 'https://corsproxy.io/?url=';
+
 async function fetchStockPrices() {
   document.getElementById('inv-time').textContent = '更新中…';
   const stocks = (window.stocks && window.stocks.length) ? window.stocks : (BUNDLE.stocks || []);
 
-  // 用 Yahoo Finance query2（瀏覽器可跨域）
+  // 用 Yahoo Finance query2（透過 CORS 代理避開瀏覽器跨域限制）
   const symbols = stocks.map(s => s.yahoo).join(',');
-  const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice,shortName`;
+  const targetUrl = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice,shortName`;
+  const url = CORS_PROXY + encodeURIComponent(targetUrl);
 
   try {
     const res = await fetch(url, {
       headers: {'Accept': 'application/json'}
     });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     const quotes = data.quoteResponse?.result || [];
+    if(!quotes.length) throw new Error('無報價資料');
     quotes.forEach(q => {
       // 從 yahoo symbol 反推 code
       const code = q.symbol.replace('.TW','').replace('.TWO','');
@@ -3127,28 +3148,33 @@ async function fetchStockPrices() {
     toast('✅ 股價已更新');
   } catch(err) {
     console.warn('Yahoo API 失敗，嘗試備用...', err);
-    // 備用：用 TWSE API
+    // 備用：用 TWSE API（同樣透過代理避開 CORS）
     await fetchPricesTWSE(stocks);
   }
 }
 
 async function fetchPricesTWSE(stocks) {
-  // 使用 TWSE 即時 API（台股）
+  // 使用 TWSE 即時 API（台股）。00679B 這類是上櫃(OTC)標的要用 otc_，其餘上市股票用 tse_。
+  let okCount = 0;
   for(const s of stocks) {
     try {
-      const ex = s.code.length <= 4 ? 'tse' : 'tse';
-      const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex}_${s.code}.tw&json=1&delay=0`;
+      const ex = s.yahoo && s.yahoo.endsWith('.TWO') ? 'otc' : 'tse';
+      const targetUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex}_${s.code}.tw&json=1&delay=0`;
+      const url = CORS_PROXY + encodeURIComponent(targetUrl);
       const res = await fetch(url);
       const data = await res.json();
       const item = data.msgArray?.[0];
       if(item && item.z && item.z !== '-') {
         stockPrices[s.code] = parseFloat(item.z);
+        okCount++;
       }
     } catch(e) { /* 跳過 */ }
   }
   const now = new Date().toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit'});
   document.getElementById('inv-time').textContent = now+'(TWSE)';
   renderInvest();
+  if(okCount) toast('✅ 股價已更新（備援來源）');
+  else toast('⚠️ 股價暫時抓不到，稍後再試');
 }
 
 function renderInvest() {
