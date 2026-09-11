@@ -495,8 +495,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <div id="aStk" style="display:none">
     <div class="card"><div class="ct">＋ 新增</div>
       <div class="fr2 fr">
-        <div><label class="fl">代號</label><input class="fi" type="text" id="skC"></div>
-        <div><label class="fl">名稱</label><input class="fi" type="text" id="skN"></div>
+        <div><label class="fl">代號</label>
+          <select class="fs" id="skC" onchange="onSkCodeChange()">
+            <option value="">— 選擇股票 —</option>
+          </select>
+        </div>
+        <div><label class="fl">名稱</label><input class="fi" type="text" id="skN" placeholder="選代號後自動帶入"></div>
+      </div>
+      <div class="fr" id="skCOtherWrap" style="display:none">
+        <label class="fl">自訂代號</label>
+        <input class="fi" type="text" id="skCOther" placeholder="如 2330" oninput="onSkCodeOtherInput()">
       </div>
       <div class="fr"><label class="fl">日期</label><input class="fi" type="date" id="skDt"></div>
       <div class="fr"><label class="fl">類型</label>
@@ -2432,7 +2440,7 @@ function renderHBTable(list){
 // ══ 資產 ══
 let aSub='sav';
 let editSavId=null; // 目前正在編輯的存款快照 id，null 代表新增模式
-function swASub(s,btn){aSub=s;document.querySelectorAll('#aSubTab .chip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');document.getElementById('aSav').style.display=s==='sav'?'block':'none';document.getElementById('aStk').style.display=s==='stk'?'block':'none'}
+function swASub(s,btn){aSub=s;document.querySelectorAll('#aSubTab .chip').forEach(b=>b.classList.remove('on'));btn.classList.add('on');document.getElementById('aSav').style.display=s==='sav'?'block':'none';document.getElementById('aStk').style.display=s==='stk'?'block':'none';if(s==='stk')renderSk()}
 function buildSvI(){document.getElementById('svInputs').innerHTML=BANKS.map(b=>`<div class="fr"><label class="fl">${b}</label><input class="fi" type="number" id="sv_${b}" placeholder="0" inputmode="numeric"></div>`).join('')}
 function fillLastSav(){
   if(!savingsH.length){toast('⚠️ 尚無歷史快照可帶入');return}
@@ -2606,15 +2614,70 @@ function toggleSkGroup(code){
   if(skOpenGroups.has(code)) skOpenGroups.delete(code); else skOpenGroups.add(code);
   renderSk();
 }
+function getKnownStockCodes(){
+  // 彙整「已經出現過」的股票代號＋名稱，給代號下拉選單、以及自訂代號時的自動帶入名稱用
+  const map = {};
+  (BUNDLE.stocks||[]).forEach(s=>{ if(s.code && s.name && !map[s.code]) map[s.code]=s.name; });
+  (stocks||[]).forEach(s=>{ if(s.code && s.name) map[s.code]=s.name; }); // 以目前真正資料為準，會覆蓋掉舊的
+  return Object.entries(map).map(([code,name])=>({code,name})).sort((a,b)=>a.code.localeCompare(b.code));
+}
+function populateSkCodeSelect(){
+  const sel = document.getElementById('skC');
+  if(!sel) return;
+  const cur = sel.value;
+  const known = getKnownStockCodes();
+  sel.innerHTML = '<option value="">— 選擇股票 —</option>'+
+    known.map(s => '<option value="'+s.code+'">'+s.code+' '+s.name+'</option>').join('')+
+    '<option value="__other__">其他（自行輸入新代號）</option>';
+  if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+}
+function onSkCodeChange(){
+  const sel = document.getElementById('skC').value;
+  const otherWrap = document.getElementById('skCOtherWrap');
+  const nameEl = document.getElementById('skN');
+  if(sel === '__other__') {
+    otherWrap.style.display = 'block';
+    nameEl.value = '';
+    nameEl.readOnly = false;
+    nameEl.placeholder = '新股票，請輸入名稱';
+    document.getElementById('skCOther').value = '';
+    document.getElementById('skCOther').focus();
+  } else {
+    otherWrap.style.display = 'none';
+    if(sel) {
+      const known = getKnownStockCodes().find(s => s.code === sel);
+      nameEl.value = known ? known.name : '';
+      nameEl.readOnly = true;
+    } else {
+      nameEl.value = '';
+      nameEl.readOnly = false;
+      nameEl.placeholder = '選代號後自動帶入';
+    }
+  }
+}
+function onSkCodeOtherInput(){
+  // 自訂代號輸入時，若前綴符合過去出現過的股票，自動帶入名稱（唯一符合才帶，避免帶錯）
+  const typed = (document.getElementById('skCOther').value || '').trim();
+  const nameEl = document.getElementById('skN');
+  if(!typed) return;
+  const known = getKnownStockCodes();
+  const exact = known.find(s => s.code === typed);
+  if(exact) { nameEl.value = exact.name; return; }
+  const matches = known.filter(s => s.code.startsWith(typed));
+  if(matches.length === 1) nameEl.value = matches[0].name;
+}
 function togSk(){const t=document.getElementById('skT').value;document.getElementById('skBS').style.display=t==='dividend'?'none':'block';document.getElementById('skDv').style.display=t==='dividend'?'block':'none'}
 async function addSk(){
-  const c=document.getElementById('skC').value.trim();if(!c){toast('⚠️ 請填代號');return}
+  const sel = document.getElementById('skC').value;
+  const c = (sel === '__other__' || !sel) ? (document.getElementById('skCOther')?.value || '').trim() : sel;
+  if(!c){toast('⚠️ 請選擇或輸入代號');return}
   const it={id:Date.now(),code:c,name:document.getElementById('skN').value.trim(),date:document.getElementById('skDt').value||today(),type:document.getElementById('skT').value,price:parseFloat(document.getElementById('skP')?.value)||0,shares:parseFloat(document.getElementById('skS')?.value)||0,total:0,dividend:parseFloat(document.getElementById('skD')?.value)||0};
   it.total=Math.round(it.price*it.shares);
   stocks.unshift(it);renderSk();toast('✓ 已儲存');
   await pushToGS('stocks', it);
 }
 function renderSk(){
+  populateSkCodeSelect();
   const el=document.getElementById('skList');
   const skSortEl=document.getElementById('skSort');
   if(skSortEl) skSortEl.innerHTML=sortChips('sk',[
