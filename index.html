@@ -2601,6 +2601,11 @@ function renderBkDetail(){
 }
 
 // 股票
+let skOpenGroups = new Set(); // 目前展開的股票代號（點一下摘要列展開/收合該檔的明細）
+function toggleSkGroup(code){
+  if(skOpenGroups.has(code)) skOpenGroups.delete(code); else skOpenGroups.add(code);
+  renderSk();
+}
 function togSk(){const t=document.getElementById('skT').value;document.getElementById('skBS').style.display=t==='dividend'?'none':'block';document.getElementById('skDv').style.display=t==='dividend'?'block':'none'}
 async function addSk(){
   const c=document.getElementById('skC').value.trim();if(!c){toast('⚠️ 請填代號');return}
@@ -2620,12 +2625,32 @@ function renderSk(){
   if(!stocks.length){el.innerHTML='<div class="empty">尚無記錄</div>';return}
   const tD=stocks.filter(s=>s.type==='dividend').reduce((a,b)=>a+b.dividend,0);
   document.getElementById('dTot').textContent='累計配息 '+fmt(tD);
-  const codes={};stocks.forEach(s=>{if(!codes[s.code])codes[s.code]={name:s.name,cost:0,div:0};if(s.type==='buy')codes[s.code].cost+=s.total;if(s.type==='dividend')codes[s.code].div+=s.dividend});
+  const codes={};
+  stocks.forEach(s=>{
+    if(!codes[s.code]) codes[s.code]={name:s.name,cost:0,div:0,items:[]};
+    if(s.type==='buy') codes[s.code].cost+=s.total;
+    if(s.type==='dividend') codes[s.code].div+=s.dividend;
+    if(s.name && !codes[s.code].name) codes[s.code].name=s.name;
+    codes[s.code].items.push(s);
+  });
   const skPref=sortPref.sk;
-  const sortedTxns=[...stocks].sort((a,b)=>cmpBy(skPref, a.date,(a.type==='dividend'?a.dividend:a.total),a.code, b.date,(b.type==='dividend'?b.dividend:b.total),b.code));
-  el.innerHTML=Object.entries(codes).map(([c,d])=>`<div style="background:var(--cream);border-radius:7px;padding:7px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center"><div><span class="scode">${c}</span><span style="font-size:12px;margin-left:6px">${d.name}</span></div><div style="text-align:right"><div style="font-size:10px;color:var(--muted)">成本 ${fmt(d.cost)}</div>${d.div?`<div style="font-size:10px;color:var(--inc)">+配息 ${fmt(d.div)}</div>`:''}</div></div>`).join('')+
-    '<div style="font-size:9px;color:var(--muted);margin:7px 0 5px;text-transform:uppercase;letter-spacing:1px">明細</div>'+
-    sortedTxns.map(s=>`<div class="skr"><div><span class="scode">${s.code}</span><div style="font-size:12px;margin-top:1px">${s.name}</div><div style="font-size:10px;color:var(--muted);font-family:'DM Mono'">${s.date}</div></div><div style="text-align:right">${s.type==='dividend'?`<div style="font-size:12px;color:var(--inc)">+配息 ${fmt(s.dividend)}</div>`:`<div style="font-family:'DM Mono';font-size:11px">${s.type==='buy'?'買':'賣'} @${s.price}x${s.shares}</div><div style="font-family:'DM Mono';font-size:11px;color:var(--muted)">${fmt(s.total)}</div>`}</div></div>`).join('');
+  el.innerHTML = Object.entries(codes).map(([c,d])=>{
+    const open = skOpenGroups.has(c);
+    const sortedItems=[...d.items].sort((a,b)=>cmpBy(skPref, a.date,(a.type==='dividend'?a.dividend:a.total),a.code, b.date,(b.type==='dividend'?b.dividend:b.total),b.code));
+    const detailRows = sortedItems.map(s=>
+      `<div class="skr"><div><span class="scode">${s.code}</span><div style="font-size:12px;margin-top:1px">${s.name}</div><div style="font-size:10px;color:var(--muted);font-family:'DM Mono'">${s.date}</div></div><div style="text-align:right">${s.type==='dividend'?`<div style="font-size:12px;color:var(--inc)">+配息 ${fmt(s.dividend)}</div>`:`<div style="font-family:'DM Mono';font-size:11px">${s.type==='buy'?'買':'賣'} @${s.price}x${s.shares}</div><div style="font-family:'DM Mono';font-size:11px;color:var(--muted)">${fmt(s.total)}</div>`}</div></div>`
+    ).join('');
+    return '<div style="margin-bottom:5px">'+
+      '<div onclick="toggleSkGroup(\''+c+'\')" style="background:var(--cream);border-radius:7px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">'+
+        '<div><span class="scode">'+c+'</span><span style="font-size:12px;margin-left:6px">'+d.name+'</span></div>'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">成本 '+fmt(d.cost)+'</div>'+(d.div?'<div style="font-size:10px;color:var(--inc)">+配息 '+fmt(d.div)+'</div>':'')+'</div>'+
+          '<span style="font-size:11px;color:var(--muted)">'+(open?'▲':'▼')+'</span>'+
+        '</div>'+
+      '</div>'+
+      (open ? '<div style="padding:4px 4px 2px;background:var(--paper);border-radius:0 0 7px 7px">'+(detailRows||'<div class="empty" style="padding:8px 0">尚無明細</div>')+'</div>' : '')+
+    '</div>';
+  }).join('');
 }
 
 
@@ -3334,16 +3359,27 @@ async function submitDivQuick() {
   if(!code) { toast('⚠️ 請選擇股票'); return; }
   if(!amt)  { toast('⚠️ 請填配息金額'); return; }
 
-  // 更新 BUNDLE.stocks 裡的配息記錄
-  const stock = BUNDLE.stocks.find(s => s.code === code);
-  if(stock) {
-    stock.dividends = stock.dividends || [];
-    stock.dividends.push({date, amount: amt});
-    stock.total_dividend = (stock.total_dividend || 0) + amt;
+  // 重要：要寫進「資產→股票」實際在用的同一份 flat stocks 陣列（並同步到 GS），
+  // 而不是只改記憶體裡的 BUNDLE.stocks（那份跟資產頁的資料來源是分開的，之前配息同步進去
+  // 之後看不到、也沒真的存到雲端，就是因為寫錯地方）。
+  const existing = stocks.find(s => s.code === code && s.name) || (BUNDLE.stocks||[]).find(s => s.code === code);
+  const name = existing?.name || code;
+  const it = {id: Date.now(), code, name, date, type: 'dividend', price: 0, shares: 0, total: 0, dividend: amt};
+  stocks.unshift(it);
+
+  // 同步更新 BUNDLE.stocks（讓「投資」頁在本次瀏覽也能看到最新總額）
+  const bStock = (BUNDLE.stocks||[]).find(s => s.code === code);
+  if(bStock) {
+    bStock.dividends = bStock.dividends || [];
+    bStock.dividends.push({date, amount: amt});
+    bStock.total_dividend = (bStock.total_dividend || 0) + amt;
   }
+
   closeDivQuick();
-  toast('✅ 配息已同步到投資頁！');
+  toast('✅ 配息已同步！');
+  if(curPg === 'assets') renderSk();
   if(curPg === 'invest') renderInvest();
+  await pushToGS('stocks', it);
 }
 
 // ── 投資買入快填 ──
@@ -3382,32 +3418,38 @@ async function submitBuyQuick() {
     name = (document.getElementById('bqName')?.value || '').trim();
     if(!code || !name) { toast('⚠️ 請選擇股票或填入代號和名稱'); return; }
   } else {
-    const existing = BUNDLE.stocks.find(s => s.code === code);
+    const existing = stocks.find(s => s.code === code && s.name) || (BUNDLE.stocks||[]).find(s => s.code === code);
     name = existing?.name || code;
   }
   if(!price || !shares) { toast('⚠️ 請填入價格和股數'); return; }
 
-  const buyRecord = {date, price, shares, amount: price * shares, cost: cost || price * shares};
+  // 同上：寫進「資產→股票」實際在用的 flat stocks 陣列並同步到 GS
+  const it = {id: Date.now(), code, name, date, type: 'buy', price, shares, total: cost || price * shares, dividend: 0};
+  stocks.unshift(it);
 
-  // 更新或新增 BUNDLE.stocks
-  let stock = BUNDLE.stocks.find(s => s.code === code);
-  if(stock) {
-    stock.buys = stock.buys || [];
-    stock.buys.push(buyRecord);
-    stock.total_shares  = (stock.total_shares  || 0) + shares;
-    stock.total_cost    = (stock.total_cost    || 0) + (cost || price * shares);
+  // 同步更新 BUNDLE.stocks（讓「投資」頁在本次瀏覽也能看到）
+  let bStock = (BUNDLE.stocks||[]).find(s => s.code === code);
+  const buyRecord = {date, price, shares, amount: price * shares, cost: cost || price * shares};
+  if(bStock) {
+    bStock.buys = bStock.buys || [];
+    bStock.buys.push(buyRecord);
+    bStock.total_shares = (bStock.total_shares || 0) + shares;
+    bStock.total_cost   = (bStock.total_cost   || 0) + (cost || price * shares);
   } else {
-    const yahoo = code + '.TW';
+    BUNDLE.stocks = BUNDLE.stocks || [];
     BUNDLE.stocks.push({
-      id: Date.now(), code, name, yahoo,
+      id: Date.now(), code, name, yahoo: code + '.TW',
       total_shares: shares, total_cost: cost || price * shares,
       total_dividend: 0, total_refund: 0,
       buys: [buyRecord], dividends: []
     });
   }
+
   closeBuyQuick();
-  toast('✅ 買入記錄已同步到投資頁！');
+  toast('✅ 買入記錄已同步！');
+  if(curPg === 'assets') renderSk();
   if(curPg === 'invest') renderInvest();
+  await pushToGS('stocks', it);
 }
 
 // ══ 學費補助快填 ══
