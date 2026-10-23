@@ -1507,10 +1507,15 @@ function setSyncStatus(state, msg) {
 }
 
 // ══ Google Sheets API ══
-async function gasGet(params) {
+async function gasGet(params, timeoutMs=25000) {
   const url = GAS_URL + '?' + new URLSearchParams(params);
-  const res = await fetch(url);
-  return res.json();
+  // 加逾時：手機網路卡住時 fetch 可能永遠不回來，逾時後才能重試
+  const ctl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  const t = ctl ? setTimeout(()=>ctl.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(url, ctl ? {signal: ctl.signal} : undefined);
+    return await res.json();
+  } finally { if(t) clearTimeout(t); }
 }
 async function gasPost(body) {
   const res = await fetch(GAS_URL, {
@@ -1532,10 +1537,28 @@ function mergeById(base, cloud) {
 function sortByDateDesc(arr) {
   return arr.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
 }
+// 清理雲端資料：沒有日期的列會讓畫面整個算不出來，先排除；id 統一成數字
+function cleanRecs(arr){
+  return (arr||[]).filter(r=>r && r.date && /^\d{4}-\d{2}/.test(String(r.date)))
+    .map(r=> (typeof r.id==='string' && /^\d+$/.test(r.id)) ? {...r, id:+r.id} : r);
+}
+let lastCloudIds = new Set();
+let dataSource = 'bundle'; // bundle | cache | cloud
 // 把雲端資料套用到記憶體（啟動快取、雲端載入共用同一套邏輯）
-function applyGSData(d) {
+function applyGSData(d, src) {
   if(!d) return;
-  if(d.records  && d.records.length)  records  = sortByDateDesc(mergeById(BUNDLE.records, fixRecordDates(d.records)));
+  if(d.records && d.records.length){
+    const cloud = cleanRecs(fixRecordDates(d.records));
+    // 雲端已經有歷史資料就以雲端為準（刪除才不會被內建資料救回來）；沒有才拿內建資料當底
+    const hasHistory = cloud.some(r=>+r.id < 9e6);
+    let merged = mergeById(hasHistory ? [] : BUNDLE.records, cloud);
+    // 還沒上傳成功的新增記錄也要顯示
+    const pend = getPend().filter(x=>x.sheetKey==='records').map(x=>x.data);
+    merged = mergeById(merged, pend.filter(p=>!merged.some(r=>String(r.id)===String(p.id))));
+    records = sortByDateDesc(merged);
+    if(src==='cloud') lastCloudIds = new Set(cloud.map(r=>String(r.id)));
+    seedBizFromRecords();
+  }
   if(d.salary   && d.salary.length)   salaries = normSalaries(d.salary);
   if(d.tuitionN && d.tuitionN.length) tuitionN = fixTuitionCats(fixRecordDates(d.tuitionN));
   if(d.tuitionD && d.tuitionD.length) tuitionD = fixTuitionCats(fixRecordDates(d.tuitionD));
@@ -1543,12 +1566,27 @@ function applyGSData(d) {
   if(d.hbD      && d.hbD.length)      hongbaoD = d.hbD;
   if(d.stocks   && d.stocks.length)   stocks   = d.stocks;
   if(d.savings  && d.savings.length)  savingsH = normSavings(d.savings);
+  if(src) dataSource = src;
+  updateDataNotice();
 }
-// 本機快取：每次成功同步就存一份，下次開啟先用它顯示，不會倒退回內建資料
+
+// 本機快取：localStorage + IndexedDB 雙份（localStorage 空間小，滿了也還有 IndexedDB）
 const GS_CACHE_KEY = 'gs_cache_v1';
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    if(typeof indexedDB==='undefined') return rej(new Error('no idb'));
+    const rq = indexedDB.open('bilanz_cache', 1);
+    rq.onupgradeneeded = ()=> rq.result.createObjectStore('kv');
+    rq.onsuccess = ()=> res(rq.result); rq.onerror = ()=> rej(rq.error);
+  });
+}
+async function idbSet(k,v){ try{ const db=await idbOpen(); await new Promise((r,j)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').put(v,k); tx.oncomplete=r; tx.onerror=()=>j(tx.error); }); }catch(e){} }
+async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((r,j)=>{ const rq=db.transaction('kv').objectStore('kv').get(k); rq.onsuccess=()=>r(rq.result||null); rq.onerror=()=>j(rq.error); }); }catch(e){ return null; } }
 function saveGSCache(d) {
-  try { localStorage.setItem(GS_CACHE_KEY, JSON.stringify({ts: Date.now(), data: d})); }
-  catch(e) { console.warn('快取寫入失敗（可能空間不足）:', e); }
+  const c = {ts: Date.now(), data: d};
+  try { localStorage.setItem(GS_CACHE_KEY, JSON.stringify(c)); }
+  catch(e) { console.warn('localStorage 快取寫入失敗（空間不足），改存 IndexedDB:', e); try{ localStorage.removeItem(GS_CACHE_KEY); }catch(_){} }
+  idbSet(GS_CACHE_KEY, c);
 }
 function loadGSCache() {
   try {
@@ -1558,6 +1596,7 @@ function loadGSCache() {
     return (c && c.data) ? c : null;
   } catch(e) { return null; }
 }
+let lastSyncTs = 0;
 
 let _gsLoading = null; // 避免同時重複發出多個 readAll
 async function loadFromGS() {
@@ -1566,17 +1605,20 @@ async function loadFromGS() {
     try {
       setSyncStatus('loading', '正在從 Google Sheets 載入…');
       const result = await gasGet({ action: 'readAll' });
-      if(!result.ok) throw new Error(result.error);
+      if(!result || !result.ok) throw new Error(result && result.error || '雲端回應格式錯誤');
 
-      applyGSData(result.data);
+      applyGSData(result.data, 'cloud');
       saveGSCache(result.data);
+      lastSyncTs = Date.now();
 
       gsLoaded = true;
       setSyncStatus('ok', '已同步 · ' + new Date().toLocaleTimeString('zh-TW'));
+      flushPending(lastCloudIds).then(()=>{ if(typeof checkLocalOnly==='function') checkLocalOnly(); });
       return true;
     } catch(err) {
-      console.warn('GS 載入失敗，使用快取/內建資料:', err);
-      setSyncStatus('err', '離線模式（使用上次快取）');
+      console.warn('GS 載入失敗:', err);
+      setSyncStatus('err', dataSource==='bundle' ? '雲端載入失敗' : '離線模式（使用上次快取）');
+      updateDataNotice(err);
       return false;
     } finally {
       _gsLoading = null;
@@ -1584,18 +1626,125 @@ async function loadFromGS() {
   })();
   return _gsLoading;
 }
+// 自動重試：Apps Script 偶爾會失敗或卡住，失敗就隔幾秒再試，最多 4 次
+async function loadWithRetry(){
+  const waits = [0, 3000, 8000, 20000];
+  for(let i=0;i<waits.length;i++){
+    if(waits[i]) await new Promise(r=>setTimeout(r, waits[i]));
+    if(await loadFromGS()) return true;
+  }
+  return false;
+}
+function renderStartup(){
+  try{
+    if(typeof renderDash==='function') renderDash();
+    if(typeof renderIE==='function') renderIE();
+    if(typeof renderSalWithSearch==='function') renderSalWithSearch();
+    if(typeof renderTui==='function') renderTui();
+    if(typeof renderHB==='function') renderHB();
+    if(typeof renderAll==='function' && !['dash','ie'].includes(curPg)) renderAll();
+  }catch(e){ console.error('render error:', e); }
+}
+async function manualSync(){
+  toast('🔄 重新同步中…');
+  const ok = await loadWithRetry();
+  renderStartup();
+  toast(ok ? '✅ 同步完成' : '⚠️ 雲端暫時連不上，請稍後再試');
+}
+// 畫面上方提示：只剩內建資料時一定讓你看得到，不會默默只顯示到 2026/05
+function updateDataNotice(err){
+  let el = document.getElementById('dataNotice');
+  if(!el){
+    el = document.createElement('div'); el.id='dataNotice';
+    el.style.cssText='position:fixed;left:0;right:0;top:var(--hh);z-index:60;padding:7px 14px;font-size:12px;text-align:center;font-family:"Noto Serif TC",serif;display:none';
+    document.body.appendChild(el);
+  }
+  if(dataSource==='bundle'){
+    el.style.display='block'; el.style.background='#fbe9d7'; el.style.color='var(--exp)';
+    el.innerHTML = (err ? '⚠️ 雲端暫時連不上，目前只顯示內建舊資料（到 2026/05）' : '⏳ 正在從雲端載入最新資料…')
+      + ' <button onclick="manualSync()" style="margin-left:8px;border:1px solid var(--exp);background:#fff;color:var(--exp);border-radius:8px;padding:2px 8px;font-size:11px;cursor:pointer">重新載入</button>';
+  } else el.style.display='none';
+}
+
+// ── 只存在這台裝置、雲端沒有的記錄（以前上傳失敗的）：列出來讓你確認再補傳 ──
+const LOCAL_IGNORE_KEY = 'local_only_ignored_v1';
+function findLocalOnly(){
+  if(!lastCloudIds.size) return [];
+  const ign = new Set(getLS(LOCAL_IGNORE_KEY, []).map(String));
+  const del = new Set(getLS('rn_d', []).map(String));
+  const pend = new Set(getPend().map(x=>String(x.data.id)));
+  const cutoff = new Date(Date.now()-180*86400000).toISOString().slice(0,10);
+  return cleanRecs(getLS('rn', [])).filter(r=>{
+    const k=String(r.id);
+    return +r.id>9e6 && r.date>=cutoff && !lastCloudIds.has(k) && !ign.has(k) && !del.has(k) && !pend.has(k);
+  });
+}
+function checkLocalOnly(){
+  const list = findLocalOnly();
+  let el = document.getElementById('localOnlyBar');
+  if(!list.length){ if(el) el.remove(); return; }
+  if(!el){
+    el = document.createElement('div'); el.id='localOnlyBar';
+    el.style.cssText='position:fixed;left:10px;right:10px;bottom:calc(var(--bnh) + 10px);z-index:70;background:#fff;border:1.5px solid var(--gold);border-radius:12px;padding:10px 12px;box-shadow:0 4px 16px var(--sh);font-size:12px;max-height:55vh;overflow:auto';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div style="font-weight:700;margin-bottom:6px">🔍 找到 ${list.length} 筆只存在這台裝置的記錄（之前可能沒上傳成功）</div>
+    <div style="color:var(--muted);font-size:11px;margin-bottom:6px">勾選要補傳到雲端的；如果是你在別台刪掉的，就不要勾</div>
+    ${list.map(r=>`<label style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--cream)">
+      <input type="checkbox" class="loCk" value="${r.id}" checked style="accent-color:var(--sky)">
+      <span style="flex:1">${r.date} ${(r.note||r.cat||'—').slice(0,24)}</span>
+      <span style="font-family:'DM Mono';color:${r.type==='income'?'var(--inc)':'var(--exp)'}">${r.type==='income'?'+':'-'}${fmt(r.amount)}</span></label>`).join('')}
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button onclick="resolveLocalOnly(false)" style="flex:1;padding:8px;border-radius:9px;border:1px solid var(--border);background:var(--cream);font-size:12px;cursor:pointer">不用，全部忽略</button>
+      <button onclick="resolveLocalOnly(true)" style="flex:1;padding:8px;border-radius:9px;border:none;background:var(--sky);color:#fff;font-size:12px;font-weight:600;cursor:pointer">補傳勾選的</button>
+    </div>`;
+}
+async function resolveLocalOnly(upload){
+  const list = findLocalOnly();
+  const picked = upload ? new Set([...document.querySelectorAll('.loCk:checked')].map(x=>x.value)) : new Set();
+  const ign = getLS(LOCAL_IGNORE_KEY, []);
+  list.forEach(r=>{ if(!picked.has(String(r.id))) ign.push(String(r.id)); });
+  setLS(LOCAL_IGNORE_KEY, ign);
+  const el=document.getElementById('localOnlyBar'); if(el) el.remove();
+  const ups = list.filter(r=>picked.has(String(r.id)));
+  ups.forEach(r=>{ if(!records.some(x=>String(x.id)===String(r.id))) records.push(r); });
+  sortByDateDesc(records); renderStartup();
+  for(const r of ups){ await pushToGS('records', r); lastCloudIds.add(String(r.id)); }
+  if(ups.length) toast(`✅ 已補傳 ${ups.length} 筆`);
+}
 
 // ══ 同步新記錄到 GS ══
+// ── 待上傳佇列：新增先放本機，雲端確認收到才移除；失敗會在下次載入時自動補傳 ──
+const PEND_KEY = 'pending_adds_v1';
+function getPend(){ return getLS(PEND_KEY, []); }
+function addPend(sheetKey, data){ const a=getPend().filter(x=>!(x.sheetKey===sheetKey && String(x.data.id)===String(data.id))); a.push({sheetKey, data, t:Date.now()}); setLS(PEND_KEY,a); }
+function removePend(sheetKey, id){ setLS(PEND_KEY, getPend().filter(x=>!(x.sheetKey===sheetKey && String(x.data.id)===String(id)))); }
 async function pushToGS(sheetKey, data) {
+  addPend(sheetKey, data);
   try {
     setSyncUI('syncing', '同步中…');
-    await gasPost({ action: 'append', sheet: sheetKey, data });
+    const res = await gasPost({ action: 'append', sheet: sheetKey, data });
+    if(res && res.ok===false) throw new Error(res.error||'append failed');
+    removePend(sheetKey, data.id);
     setSyncUI('ok', '已同步');
     return true;
   } catch(err) {
-    setSyncUI('error', '同步失敗');
+    setSyncUI('error', '⏳ 未上傳，稍後自動補傳');
     console.error('pushToGS error:', err);
     return false;
+  }
+}
+// 雲端載入成功後呼叫：雲端已經有的就移除，沒有的重傳
+async function flushPending(cloudIds){
+  const list = getPend(); if(!list.length) return;
+  for(const it of list){
+    const has = it.sheetKey==='records' ? cloudIds.has(String(it.data.id)) : false;
+    if(has){ removePend(it.sheetKey, it.data.id); continue; }
+    if(it.sheetKey!=='records') continue; // 其他表維持原本行為，避免重複
+    try {
+      const res = await gasPost({ action:'append', sheet:it.sheetKey, data:it.data });
+      if(!(res && res.ok===false)) removePend(it.sheetKey, it.data.id);
+    } catch(e) { /* 下次再試 */ }
   }
 }
 
@@ -1686,6 +1835,7 @@ async function submitQ() {
     isBiz: document.getElementById('qBiz')?.checked||false
   };
   records.unshift(r);
+  if(r.isBiz) markBizLocal(r.id, true);
   setLS('rn', records.filter(x=>x.id>9e6));
   document.getElementById('qAmt').value='';
   document.getElementById('qNote').value='';
@@ -1708,7 +1858,7 @@ function openE(id) {
   document.getElementById('eCat').value=r.cat||'';
   document.getElementById('eNote').value=r.note||'';
   document.getElementById('ePay').value=r.payment||'';
-  if(document.getElementById('eBiz')) document.getElementById('eBiz').checked=r.isBiz||false;
+  if(document.getElementById('eBiz')) document.getElementById('eBiz').checked=isBizRec(r);
   document.getElementById('eBE').classList.toggle('on',eT==='expense');
   document.getElementById('eBI').classList.toggle('on',eT==='income');
   document.getElementById('eModal').classList.add('on');
@@ -1727,6 +1877,7 @@ async function saveE() {
   };
   const idx = records.findIndex(r=>r.id===id);
   if(idx>=0) records[idx] = {...records[idx],...ch};
+  if(idx>=0 && ch.type==='expense') markBizLocal(id, ch.isBiz);
   closeE();
   if(curPg==='ie') renderIE();
   if(curPg==='dash') renderDash();
@@ -1888,7 +2039,7 @@ function buildRecRow(r, showDate){
   rb.className = 'rb';
   const rn = document.createElement('div');
   rn.className = 'rn';
-  if(r.isBiz) {
+  if(isBizRec(r)) {
     const badge = document.createElement('span');
     badge.style.cssText = 'background:var(--sky);color:#fff;font-size:9px;padding:1px 5px;border-radius:5px;margin-right:4px;vertical-align:middle';
     const _bs = (getBiz(r)||{}).s;
@@ -1925,6 +2076,9 @@ function renderIE(){ buildMF(); renderList(); }
 async function delR(id) {
   if(!confirm('確認刪除？')) return;
   records = records.filter(r=>r.id!==id);
+  { const d=getLS('rn_d',[]); if(!d.includes(id)){ d.push(id); setLS('rn_d',d); } }
+  setLS('rn', records.filter(x=>x.id>9e6));
+  removePend('records', id);
   renderIE(); toast('已刪除');
   await deleteInGS('records', id);
 }
@@ -2007,8 +2161,37 @@ function setAY(y){aY=y;renderAna()}
 //  狀態存在 record.biz_json（比照 items_json 的做法），本機另存一份備援
 // ══════════════════════════════════════════
 const BIZ_LS = 'biz_state_v1';
-function bizLocal(){ return getLS(BIZ_LS, {}); }
-function isBizRec(r){ return r && r.type==='expense' && (r.isBiz===true || r.isBiz==='TRUE' || r.isBiz==='true' || r.isBiz===1); }
+let _bizLoc = null;
+function bizLocal(){ if(!_bizLoc) _bizLoc = getLS(BIZ_LS, {}); return _bizLoc; }
+function saveBizLocal(){ setLS(BIZ_LS, bizLocal()); }
+function cloudBizFlag(r){ return r.isBiz===true || r.isBiz==='TRUE' || r.isBiz==='true' || r.isBiz===1 || r.isBiz==='1'; }
+// 出差標記：雲端有標記，或這台裝置有標記（雲端表單沒有 isBiz 欄位時也不會消失）
+function isBizRec(r){
+  if(!r || r.type!=='expense') return false;
+  const lb = bizLocal()[String(r.id)];
+  if(lb && lb.s==='none') return false;
+  return cloudBizFlag(r) || !!(lb && lb.s);
+}
+// 記帳/編輯時更新本機標記
+function markBizLocal(id, on){
+  const loc = bizLocal(), k = String(id);
+  if(on){ if(!loc[k] || loc[k].s==='none') loc[k] = {s:'pending', t:Date.now()}; }
+  else loc[k] = {s:'none', t:Date.now()};
+  saveBizLocal();
+}
+// 看過一次雲端的出差標記就記在本機，之後雲端回傳少了欄位也不會不見
+function seedBizFromRecords(){
+  const loc = bizLocal(); let changed = false;
+  records.forEach(r=>{
+    if(r.type!=='expense' || !cloudBizFlag(r)) return;
+    const k = String(r.id);
+    let cb = null;
+    if(typeof r.biz_json==='string' && r.biz_json.trim()){ try{ cb = JSON.parse(r.biz_json); }catch(e){} }
+    if(!loc[k]){ loc[k] = (cb && cb.s) ? cb : {s:'pending', t:0}; changed = true; }
+    else if(cb && cb.s && (+cb.t||0) > (+loc[k].t||0)){ loc[k] = cb; changed = true; }
+  });
+  if(changed) saveBizLocal();
+}
 // 讀取狀態一律走這裡（不依賴載入時有沒有正規化，雲端/快取/內建資料都適用）
 function getBiz(r){
   if(!isBizRec(r)) return null;
@@ -2018,7 +2201,7 @@ function getBiz(r){
   else if(r.biz_json && typeof r.biz_json==='object') b = r.biz_json;
   // 本機備援：雲端沒有，或本機的修改比較新（雲端還沒同步到）就用本機的
   const lb = bizLocal()[String(r.id)];
-  if(lb && lb.s && (!b || !b.s || (+lb.t||0) > (+b.t||0))) b = lb;
+  if(lb && lb.s && lb.s!=='none' && (!b || !b.s || (+lb.t||0) > (+b.t||0))) b = lb;
   return (b && b.s) ? b : {s:'pending'};
 }
 function daysSince(d){ if(!d) return 0; return Math.floor((Date.now() - new Date(d+'T00:00:00').getTime())/86400000); }
@@ -2036,7 +2219,7 @@ async function setBizState(ids, state){
     if(id>9e6) setLS('rn', records.filter(x=>x.id>9e6));
     else { const e=getLS('rn_e',{}); e[id]={...records[idx]}; setLS('rn_e',e); }
   }
-  setLS(BIZ_LS, loc);
+  saveBizLocal();
   renderBiz();
   if(curPg==='ie' && typeof renderList==='function') renderList();
   for(const id of ids){
@@ -3095,7 +3278,7 @@ function batchAction(action){
 function batchBizSet(val){
   batchSelected.forEach(id=>{
     const idx=records.findIndex(r=>r.id===id);
-    if(idx>=0){records[idx].isBiz=val;if(id>9e6)setLS('rn',records.filter(x=>x.id>9e6));else{const e=getLS('rn_e',{});e[id]={...records[idx]};setLS('rn_e',e);}setSyncUI('syncing','同步中…');updateCloud('records',id,{isBiz:val});}
+    if(idx>=0){records[idx].isBiz=val;markBizLocal(id,val);if(id>9e6)setLS('rn',records.filter(x=>x.id>9e6));else{const e=getLS('rn_e',{});e[id]={...records[idx]};setLS('rn_e',e);}setSyncUI('syncing','同步中…');updateCloud('records',id,{isBiz:val});}
   });
   document.getElementById('batchModal').classList.remove('on');
   toast((val?'✅ 已標記':'✅ 已取消')+' '+batchSelected.size+' 筆出差');
@@ -4079,35 +4262,33 @@ function drawPlanDonut(id,cats) {
   // 啟動時先套用上次的雲端快取（含最新月份），再快速渲染
   const _cache = loadGSCache();
   if(_cache) {
-    try { applyGSData(_cache.data); } catch(e) { console.warn('快取套用失敗:', e); }
+    try { applyGSData(_cache.data, 'cache'); lastSyncTs=_cache.ts||0; } catch(e) { console.warn('快取套用失敗:', e); }
+  } else {
+    // localStorage 沒有就找 IndexedDB 那份
+    idbGet(GS_CACHE_KEY).then(c=>{
+      if(c && c.data && dataSource==='bundle'){ try{ applyGSData(c.data,'cache'); lastSyncTs=c.ts||0; renderStartup(); }catch(e){} }
+    });
   }
-  const renderStartup = () => {
-    if(typeof renderDash==='function') renderDash();
-    if(typeof renderIE==='function') renderIE();
-    if(typeof renderSalWithSearch==='function') renderSalWithSearch();
-    if(typeof renderTui==='function') renderTui();
-    if(typeof renderHB==='function') renderHB();
-    if(typeof renderAll==='function' && !['dash','ie'].includes(curPg)) renderAll();
-  };
+  updateDataNotice();
   renderStartup();
 
   // 財務規劃：季度提醒檢查
   if(typeof checkPlanReminder==='function') checkPlanReminder();
 
-  // 背景從 GS 載入最新資料：不論多久回來，一到就重畫（逾時只更新狀態，不再放棄重畫）
+  // 背景從 GS 載入最新資料：一到就重畫；失敗自動重試
   setSyncStatus('loading', _cache ? '已顯示上次資料，連線更新中…' : '連線中…');
   const _slowTimer = setTimeout(()=>{
     if(!gsLoaded) setSyncStatus('loading','雲端回應較慢，仍在載入…');
   }, 12000);
-  loadFromGS().then(ok=>{
+  loadWithRetry().then(ok=>{
     clearTimeout(_slowTimer);
-    if(ok) renderStartup();
+    renderStartup();
   });
 
-  // 從背景切回 App（手機常見）時，自動再同步一次
+  // 從背景切回 App（手機常見）時，超過 1 分鐘沒同步就再同步一次
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible') {
-      loadFromGS().then(ok=>{ if(ok) renderStartup(); });
+    if(document.visibilityState==='visible' && Date.now()-lastSyncTs > 60000) {
+      loadWithRetry().then(()=>renderStartup());
     }
   });
 })();
