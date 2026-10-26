@@ -746,6 +746,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <span style="font-size:11px;color:var(--muted);margin-left:6px">待向公司請款</span>
       </span>
     </label>
+    <div id="eBizStat" style="display:none;margin:-4px 0 10px;padding:8px 12px;border:1px dashed var(--border);border-radius:9px;font-size:12px"></div>
     <div class="fr2">
       <button class="sbtn sec" onclick="closeE()">取消</button>
       <button class="sbtn" onclick="saveE()">儲存</button>
@@ -1550,10 +1551,11 @@ function applyGSData(d, src) {
   if(d.records && d.records.length){
     let cloud = cleanRecs(fixRecordDates(d.records));
     // 出差狀態存在雲端的一筆隱藏記錄（id 9000000，type meta），不顯示在任何地方
-    const meta = cloud.find(r=>String(r.id)===String(BIZ_META_ID) || r.type==='meta');
-    if(src==='cloud') { lastCloudIds = new Set(cloud.map(r=>String(r.id))); bizMetaExists = !!meta; }
+    const metas = cloud.filter(r=>String(r.id)===String(BIZ_META_ID) || r.type==='meta');
+    if(src==='cloud') { lastCloudIds = new Set(cloud.map(r=>String(r.id))); bizMetaExists = metas.length>0; }
     cloud = cloud.filter(r=>!(String(r.id)===String(BIZ_META_ID) || r.type==='meta'));
-    if(meta) mergeBizMeta(meta.note, src==='cloud');
+    // 兩台裝置可能各建了一筆，全部合併（每筆狀態以最新時間為準）
+    metas.forEach((m,i)=>mergeBizMeta(m.note, src==='cloud' && i===metas.length-1));
     // 雲端已經有歷史資料就以雲端為準（刪除才不會被內建資料救回來）；沒有才拿內建資料當底
     const hasHistory = cloud.some(r=>+r.id < 9e6);
     let merged = mergeById(hasHistory ? [] : BUNDLE.records, cloud);
@@ -1814,6 +1816,7 @@ function go(id, btn) {
   document.getElementById('pg-'+id).classList.add('on');
   document.getElementById('bn-'+id).classList.add('on');
   curPg = id;
+  if(typeof renderBizActions==='function') renderBizActions();
   ({dash:renderDash,ie:renderIE,analysis:renderAna,salary:renderSal,kids:renderKids,invest:renderInvest,assets:renderAssets,plan:renderPlan})[id]?.();
 }
 
@@ -1869,6 +1872,7 @@ function openE(id) {
   document.getElementById('eNote').value=r.note||'';
   document.getElementById('ePay').value=r.payment||'';
   if(document.getElementById('eBiz')) document.getElementById('eBiz').checked=isBizRec(r);
+  if(typeof renderEBizStat==='function') renderEBizStat(r);
   document.getElementById('eBE').classList.toggle('on',eT==='expense');
   document.getElementById('eBI').classList.toggle('on',eT==='income');
   document.getElementById('eModal').classList.add('on');
@@ -2309,11 +2313,18 @@ function renderBiz(){
     if(grp==='paid') tag = ` ・${b.pd||''} ${b.via==='salary'?'併薪資':'匯款'}入帳`;
     const ck = grp==='paid' ? '' : `<input type="checkbox" ${bizSel.has(r.id)?'checked':''} onchange="toggleBizSel(${r.id},this)" style="width:17px;height:17px;accent-color:var(--sky);flex-shrink:0;margin-top:2px">`;
     const undo = grp==='pending' ? '' : `<button onclick="undoBiz(${r.id})" title="退回上一步" style="border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0 2px">↩</button>`;
+    const sb = 'border:none;border-radius:7px;padding:4px 8px;font-size:11px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;white-space:nowrap';
+    const acts = grp==='pending'
+      ? `<button onclick="bizQuick(${r.id},'claim')" style="${sb};background:var(--gold)">📤 已請款</button><button onclick="bizQuick(${r.id},'paid')" style="${sb};background:var(--inc)">✅ 已入帳</button>`
+      : grp==='claimed'
+      ? `<button onclick="bizQuick(${r.id},'paid')" style="${sb};background:var(--inc)">✅ 已入帳</button>`
+      : `<button onclick="bizQuick(${r.id},'edit')" style="${sb};background:var(--sky)">✏️ 修改</button>`;
     return `<div style="display:flex;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--cream);gap:8px">
       ${ck}
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.note||'—'}</div>
         <div style="font-size:10px;color:var(--muted)">${r.date}${r.payment?' ・'+r.payment:''}${tag}</div>
+        <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">${acts}</div>
       </div>
       <div style="font-family:'DM Mono';font-size:13px;color:var(--exp);font-weight:600;flex-shrink:0">${fmt(r.amount)}</div>
       ${undo}
@@ -2356,26 +2367,58 @@ function renderBiz(){
 }
 
 function renderBizActions(){
-  const el = document.getElementById('bizActions'); if(!el) return;
-  if(!bizSel.size){ el.innerHTML='<div style="font-size:10px;color:var(--muted);padding:2px 0">勾選項目後可「標記已請款」或「標記已入帳」，可一次勾多筆整批處理</div>'; return; }
+  const el = document.getElementById('bizActions');
+  if(el) el.innerHTML='<div style="font-size:10px;color:var(--muted);padding:2px 0">單筆直接按該筆的按鈕；整批一起請款就勾選左邊方框，下方會出現整批按鈕</div>';
+  let fl = document.getElementById('bizFloat');
+  if(!bizSel.size || curPg!=='analysis'){ if(fl) fl.style.display='none'; return; }
+  if(!fl){
+    fl = document.createElement('div'); fl.id='bizFloat';
+    fl.style.cssText='position:fixed;left:10px;right:10px;bottom:calc(var(--bnh) + 10px);z-index:80;background:#fff;border:1.5px solid var(--sky);border-radius:12px;padding:9px 11px;box-shadow:0 4px 16px var(--sh)';
+    document.body.appendChild(fl);
+  }
   const sel = records.filter(r=>bizSel.has(r.id));
   const tot = sel.reduce((t,r)=>t+(+r.amount||0),0);
   const btn = 'flex:1;padding:9px;border-radius:9px;border:none;color:#fff;font-size:12px;cursor:pointer;font-family:\'Noto Serif TC\',serif;font-weight:600';
-  el.innerHTML = `<div style="font-size:11px;color:var(--muted);margin:4px 0">已選 ${sel.length} 筆 ・ ${fmt(tot)}</div>
-    <div style="display:flex;gap:6px;margin-bottom:4px">
-      <button onclick="openBizModal('claim')" style="${btn};background:var(--gold)">📤 標記已請款</button>
-      <button onclick="openBizModal('paid')" style="${btn};background:var(--inc)">✅ 標記已入帳</button>
+  fl.style.display='block';
+  fl.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px"><span>已選 ${sel.length} 筆 ・ ${fmt(tot)}</span><span onclick="bizSel.clear();renderBiz()" style="color:var(--sky);cursor:pointer">取消選取</span></div>
+    <div style="display:flex;gap:6px">
+      <button onclick="openBizModal('claim')" style="${btn};background:var(--gold)">📤 整批已請款</button>
+      <button onclick="openBizModal('paid')" style="${btn};background:var(--inc)">✅ 整批已入帳</button>
     </div>`;
+}
+// 單筆快速操作 / 修改已入帳資料
+function bizQuick(id, mode){
+  const r = records.find(x=>x.id===id); if(!r) return;
+  bizSel = new Set([id]);
+  if(mode==='edit'){
+    // 同一次入帳的整批一起改，差額才算得對
+    const b = getBiz(r);
+    if(b.bid) records.filter(isBizRec).forEach(x=>{ if(getBiz(x).bid===b.bid) bizSel.add(x.id); });
+    openBizModal('paid', b);
+  } else openBizModal(mode);
+}
+// 收支頁編輯視窗裡的請款狀態捷徑
+function renderEBizStat(r){
+  const el = document.getElementById('eBizStat'); if(!el) return;
+  if(!isBizRec(r)){ el.style.display='none'; return; }
+  const b = getBiz(r);
+  const st = b.s==='paid' ? `✅ 已入帳（${b.pd||''}）` : b.s==='claimed' ? `📤 已請款（${b.cd||''}），等入帳` : '⏳ 待請款';
+  const sb = 'border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;margin-left:4px';
+  const acts = b.s==='pending' ? `<button onclick="closeE();bizQuick(${r.id},'claim')" style="${sb};background:var(--gold)">📤 已請款</button><button onclick="closeE();bizQuick(${r.id},'paid')" style="${sb};background:var(--inc)">✅ 已入帳</button>`
+    : b.s==='claimed' ? `<button onclick="closeE();bizQuick(${r.id},'paid')" style="${sb};background:var(--inc)">✅ 已入帳</button>`
+    : `<button onclick="closeE();bizQuick(${r.id},'edit')" style="${sb};background:var(--sky)">✏️ 修改</button>`;
+  el.innerHTML = `<span style="color:var(--muted)">請款狀態：</span><b>${st}</b><div style="margin-top:6px">${acts}</div>`;
+  el.style.display='block';
 }
 
 let bizMode = 'claim', bizVia = 'salary';
 function bizSelTotal(){ return records.filter(r=>bizSel.has(r.id)).reduce((t,r)=>t+(+r.amount||0),0); }
 const BIZ_SAL_LABELS = ['國外出差','國內出差','代墊','差旅補助'];
-function openBizModal(mode){
+function openBizModal(mode, prev){
   if(!bizSel.size) return;
   bizMode = mode;
   const tot = bizSelTotal();
-  document.getElementById('bizMTtl').firstChild.textContent = mode==='claim' ? '📤 標記已請款 ' : '✅ 標記已入帳 ';
+  document.getElementById('bizMTtl').firstChild.textContent = mode==='claim' ? '📤 標記已請款 ' : (prev ? '✏️ 修改入帳資料 ' : '✅ 標記已入帳 ');
   document.getElementById('bizMSum').innerHTML = `已選 <b>${bizSel.size}</b> 筆，支出合計 <b style="color:var(--exp)">${fmt(tot)}</b>`;
   document.getElementById('bizMDateLbl').textContent = mode==='claim' ? '請款日期' : '入帳日期';
   document.getElementById('bizMDate').value = today();
@@ -2393,6 +2436,21 @@ function openBizModal(mode){
       incs.map(r=>`<option value="${r.id}">${r.date} ${fmt(r.amount)} ${(r.note||r.cat||'').slice(0,14)}</option>`).join('');
     document.getElementById('bizMAmt').value = tot;
     setBizVia('salary');
+    if(prev){
+      if(prev.pd) document.getElementById('bizMDate').value = prev.pd;
+      if(prev.bt!=null) document.getElementById('bizMAmt').value = prev.bt;
+      setBizVia(prev.via==='transfer' ? 'transfer' : 'salary');
+      const selId = prev.via==='transfer' ? 'bizIncSel' : 'bizSalSel';
+      const sel = document.getElementById(selId);
+      if(prev.ref){
+        if(![...sel.options].some(o=>o.value===String(prev.ref))){
+          const o=document.createElement('option'); o.value=String(prev.ref); o.textContent='（原本對應的記錄）'; sel.appendChild(o);
+        }
+        sel.value = String(prev.ref);
+      }
+      if(prev.via==='salary') onBizSalChange();
+      updBizDiff();
+    }
   }
   document.getElementById('bizModal').classList.add('on');
 }
@@ -2442,7 +2500,17 @@ async function confirmBizModal(){
       setLS('rn', records.filter(x=>x.id>9e6));
       ref = String(inc.id);
       pushToGS('records', inc);
-    } else ref = v;
+    } else {
+      ref = v;
+      // 對應的是先前自動新增的收入 → 金額/日期跟著更新
+      const ir = records.find(r=>String(r.id)===String(v));
+      if(ir && String(ir.note||'').startsWith('出差費用請款入帳') && (ir.amount!==got || ir.date!==date)){
+        ir.amount = got; ir.date = date;
+        records.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+        setLS('rn', records.filter(x=>x.id>9e6));
+        updateInGS('records', ir.id, {amount: got, date});
+      }
+    }
   }
   // 記下各筆原本的請款日
   const prevCd = {}; ids.forEach(id=>{ const r=records.find(x=>x.id===id); prevCd[id]=(getBiz(r)||{}).cd||''; });
@@ -4338,10 +4406,18 @@ function drawPlanDonut(id,cats) {
 
   // 從背景切回 App（手機常見）時，超過 1 分鐘沒同步就再同步一次
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible' && Date.now()-lastSyncTs > 60000) {
+    if(document.visibilityState==='visible' && Date.now()-lastSyncTs > 30000) {
       loadWithRetry().then(()=>renderStartup());
     }
   });
+  // 電腦切回這個視窗時也同步；畫面開著時每 3 分鐘自動同步，另一台裝置改的會自己出現
+  window.addEventListener('focus', ()=>{
+    if(Date.now()-lastSyncTs > 30000) loadFromGS().then(ok=>{ if(ok) renderStartup(); });
+  });
+  setInterval(()=>{
+    if(document.visibilityState==='visible' && Date.now()-lastSyncTs > 170000)
+      loadFromGS().then(ok=>{ if(ok) renderStartup(); });
+  }, 180000);
 })();
 
 </script>
