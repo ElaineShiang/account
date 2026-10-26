@@ -1548,15 +1548,19 @@ let dataSource = 'bundle'; // bundle | cache | cloud
 function applyGSData(d, src) {
   if(!d) return;
   if(d.records && d.records.length){
-    const cloud = cleanRecs(fixRecordDates(d.records));
+    let cloud = cleanRecs(fixRecordDates(d.records));
+    // 出差狀態存在雲端的一筆隱藏記錄（id 9000000，type meta），不顯示在任何地方
+    const meta = cloud.find(r=>String(r.id)===String(BIZ_META_ID) || r.type==='meta');
+    if(src==='cloud') { lastCloudIds = new Set(cloud.map(r=>String(r.id))); bizMetaExists = !!meta; }
+    cloud = cloud.filter(r=>!(String(r.id)===String(BIZ_META_ID) || r.type==='meta'));
+    if(meta) mergeBizMeta(meta.note, src==='cloud');
     // 雲端已經有歷史資料就以雲端為準（刪除才不會被內建資料救回來）；沒有才拿內建資料當底
     const hasHistory = cloud.some(r=>+r.id < 9e6);
     let merged = mergeById(hasHistory ? [] : BUNDLE.records, cloud);
     // 還沒上傳成功的新增記錄也要顯示
     const pend = getPend().filter(x=>x.sheetKey==='records').map(x=>x.data);
     merged = mergeById(merged, pend.filter(p=>!merged.some(r=>String(r.id)===String(p.id))));
-    records = sortByDateDesc(merged);
-    if(src==='cloud') lastCloudIds = new Set(cloud.map(r=>String(r.id)));
+    records = sortByDateDesc(merged.filter(r=>r.type!=='meta' && String(r.id)!==String(BIZ_META_ID)));
     seedBizFromRecords();
   }
   if(d.salary   && d.salary.length)   salaries = normSalaries(d.salary);
@@ -1583,10 +1587,10 @@ function idbOpen(){
 async function idbSet(k,v){ try{ const db=await idbOpen(); await new Promise((r,j)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').put(v,k); tx.oncomplete=r; tx.onerror=()=>j(tx.error); }); }catch(e){} }
 async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((r,j)=>{ const rq=db.transaction('kv').objectStore('kv').get(k); rq.onsuccess=()=>r(rq.result||null); rq.onerror=()=>j(rq.error); }); }catch(e){ return null; } }
 function saveGSCache(d) {
+  // 大份快取只放 IndexedDB：放 localStorage 會把空間吃光，害出差標記、待上傳記錄存不進去
   const c = {ts: Date.now(), data: d};
-  try { localStorage.setItem(GS_CACHE_KEY, JSON.stringify(c)); }
-  catch(e) { console.warn('localStorage 快取寫入失敗（空間不足），改存 IndexedDB:', e); try{ localStorage.removeItem(GS_CACHE_KEY); }catch(_){} }
   idbSet(GS_CACHE_KEY, c);
+  try { localStorage.removeItem(GS_CACHE_KEY); } catch(_){}
 }
 function loadGSCache() {
   try {
@@ -1614,6 +1618,8 @@ async function loadFromGS() {
       gsLoaded = true;
       setSyncStatus('ok', '已同步 · ' + new Date().toLocaleTimeString('zh-TW'));
       flushPending(lastCloudIds).then(()=>{ if(typeof checkLocalOnly==='function') checkLocalOnly(); });
+      // 雲端還沒有出差狀態、但這台裝置有 → 上傳一份
+      if(!bizMetaExists && Object.values(bizLocal()).some(v=>v && (+v.t||0)>0)) syncBizMeta();
       return true;
     } catch(err) {
       console.warn('GS 載入失敗:', err);
@@ -1627,12 +1633,15 @@ async function loadFromGS() {
   return _gsLoading;
 }
 // 自動重試：Apps Script 偶爾會失敗或卡住，失敗就隔幾秒再試，最多 4 次
+let loadGaveUp = false;
 async function loadWithRetry(){
   const waits = [0, 3000, 8000, 20000];
   for(let i=0;i<waits.length;i++){
     if(waits[i]) await new Promise(r=>setTimeout(r, waits[i]));
-    if(await loadFromGS()) return true;
+    if(await loadFromGS()) { loadGaveUp = false; return true; }
   }
+  loadGaveUp = true; // 全部失敗：才顯示內建舊資料 + 警告
+  updateDataNotice(true);
   return false;
 }
 function renderStartup(){
@@ -1647,6 +1656,7 @@ function renderStartup(){
 }
 async function manualSync(){
   toast('🔄 重新同步中…');
+  loadGaveUp = false; renderStartup();
   const ok = await loadWithRetry();
   renderStartup();
   toast(ok ? '✅ 同步完成' : '⚠️ 雲端暫時連不上，請稍後再試');
@@ -1661,7 +1671,7 @@ function updateDataNotice(err){
   }
   if(dataSource==='bundle'){
     el.style.display='block'; el.style.background='#fbe9d7'; el.style.color='var(--exp)';
-    el.innerHTML = (err ? '⚠️ 雲端暫時連不上，目前只顯示內建舊資料（到 2026/05）' : '⏳ 正在從雲端載入最新資料…')
+    el.innerHTML = (loadGaveUp ? '⚠️ 雲端暫時連不上，目前只顯示內建舊資料（到 2026/05）' : '⏳ 正在從雲端載入最新資料…')
       + ' <button onclick="manualSync()" style="margin-left:8px;border:1px solid var(--exp);background:#fff;color:var(--exp);border-radius:8px;padding:2px 8px;font-size:11px;cursor:pointer">重新載入</button>';
   } else el.style.display='none';
 }
@@ -1917,7 +1927,7 @@ function matchR(r) {
 
 // ══ 收支 ══
 function buildMF() {
-  const ms=[...new Set(records.map(r=>r.date.slice(0,7)))].sort().reverse();
+  const ms=(dataSource==='bundle' && !loadGaveUp) ? [] : [...new Set(records.map(r=>r.date.slice(0,7)))].sort().reverse();
   const mf=document.getElementById('mf');
   mf.innerHTML=`<button class="chip ${cM==='all'?'on':''}" onclick="filtM('all')">全部</button>`+
     ms.map(m=>`<button class="chip ${cM===m?'on':''}" onclick="filtM('${m}')">${m.replace('-','/')}月</button>`).join('');
@@ -1941,6 +1951,10 @@ function renderList() {
   ]);
 
   const el = document.getElementById('rList');
+  if(dataSource==='bundle' && !loadGaveUp && el){
+    el.innerHTML='<div class="empty" style="padding:28px 10px;line-height:1.8">⏳ 正在載入完整資料…<br><span style="font-size:11px;color:var(--muted)">可以先按右上角 ＋ 記帳，載入完會自動合併</span></div>';
+    return;
+  }
   if(!list.length){
     el.innerHTML='<div class="empty">'+(srchQ?'找不到符合記錄':'本期無記錄')+'</div>';
     return;
@@ -2172,12 +2186,44 @@ function isBizRec(r){
   if(lb && lb.s==='none') return false;
   return cloudBizFlag(r) || !!(lb && lb.s);
 }
+// ── 出差狀態存到雲端：用 records 表裡一筆隱藏記錄的「備註」欄存整份狀態 ──
+//    不需要 Sheet 另外加欄位，換手機/電腦也看得到
+const BIZ_META_ID = 9000000;
+let bizMetaExists = false, _bizMetaTimer = null;
+function mergeBizMeta(note, fromCloud){
+  let m = null; try { m = JSON.parse(note||'{}'); } catch(e) { return; }
+  if(!m || typeof m!=='object') return;
+  const loc = bizLocal(); let localNewer = false, changed = false;
+  for(const [k,v] of Object.entries(m)){
+    if(!v || !v.s) continue;
+    if(!loc[k] || (+v.t||0) > (+loc[k].t||0)){ loc[k] = v; changed = true; }
+  }
+  for(const [k,v] of Object.entries(loc)){ if(v && (+v.t||0) > 0 && (!m[k] || (+v.t||0) > (+m[k].t||0))) localNewer = true; }
+  if(changed) saveBizLocal();
+  if(fromCloud && localNewer) syncBizMeta();
+}
+function syncBizMeta(){
+  clearTimeout(_bizMetaTimer);
+  _bizMetaTimer = setTimeout(async ()=>{
+    const loc = bizLocal(); let obj = {};
+    for(const [k,v] of Object.entries(loc)) if(v && v.s && (+v.t||0)>0) obj[k]=v;
+    let note = JSON.stringify(obj);
+    if(note.length > 45000){ for(const k of Object.keys(obj)) if(obj[k].s==='none') delete obj[k]; note = JSON.stringify(obj); }
+    if(bizMetaExists){
+      await updateInGS('records', BIZ_META_ID, {note});
+    } else {
+      bizMetaExists = true;
+      await pushToGS('records', {id:BIZ_META_ID, date:'2000-01-01', type:'meta', amount:0, cat:'', payment:'', note});
+    }
+  }, 1200);
+}
 // 記帳/編輯時更新本機標記
 function markBizLocal(id, on){
   const loc = bizLocal(), k = String(id);
-  if(on){ if(!loc[k] || loc[k].s==='none') loc[k] = {s:'pending', t:Date.now()}; }
-  else loc[k] = {s:'none', t:Date.now()};
+  if(on){ if(!loc[k] || loc[k].s==='none' || !(+loc[k].t>0)) loc[k] = {...(loc[k]&&loc[k].s!=='none'?loc[k]:{s:'pending'}), t:Date.now()}; else return; }
+  else { if(!loc[k] && !cloudBizFlag(records.find(r=>String(r.id)===k)||{})) return; loc[k] = {s:'none', t:Date.now()}; }
   saveBizLocal();
+  syncBizMeta();
 }
 // 看過一次雲端的出差標記就記在本機，之後雲端回傳少了欄位也不會不見
 function seedBizFromRecords(){
@@ -2220,6 +2266,7 @@ async function setBizState(ids, state){
     else { const e=getLS('rn_e',{}); e[id]={...records[idx]}; setLS('rn_e',e); }
   }
   saveBizLocal();
+  syncBizMeta();
   renderBiz();
   if(curPg==='ie' && typeof renderList==='function') renderList();
   for(const id of ids){
@@ -4259,15 +4306,19 @@ function drawPlanDonut(id,cats) {
     if(el) el.addEventListener('click',function(ev){if(ev.target===el)el.classList.remove('on');});
   });
 
-  // 啟動時先套用上次的雲端快取（含最新月份），再快速渲染
+  // 啟動：先拿本機快取（舊版存在 localStorage 的搬到 IndexedDB），沒有快取就顯示「載入中」，不顯示只到 5 月的舊資料
+  try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e) {}
   const _cache = loadGSCache();
   if(_cache) {
-    try { applyGSData(_cache.data, 'cache'); lastSyncTs=_cache.ts||0; } catch(e) { console.warn('快取套用失敗:', e); }
+    try { applyGSData(_cache.data, 'cache'); lastSyncTs=_cache.ts||0; idbSet(GS_CACHE_KEY, _cache); localStorage.removeItem(GS_CACHE_KEY); } catch(e) { console.warn('快取套用失敗:', e); }
   } else {
-    // localStorage 沒有就找 IndexedDB 那份
     idbGet(GS_CACHE_KEY).then(c=>{
       if(c && c.data && dataSource==='bundle'){ try{ applyGSData(c.data,'cache'); lastSyncTs=c.ts||0; renderStartup(); }catch(e){} }
     });
+  }
+  // 不是從 github.io 直接開（例如 Google 翻譯、LINE 內建瀏覽器），本機資料會存不住
+  if(!/github\.io$/.test(location.hostname) && !/^(localhost|127\.)/.test(location.hostname)){
+    setTimeout(()=>toast('⚠️ 建議用 Safari / Chrome 直接開 elaineshiang.github.io/account，否則記錄可能存不住', 6000), 1500);
   }
   updateDataNotice();
   renderStartup();
