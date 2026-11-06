@@ -1180,7 +1180,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <div class="modal-ttl">🧹 整理歷史紀錄
       <button class="modal-x" onclick="closeCleanup()">✕</button>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.7">依備註關鍵字找出可能的股票買入、出差代墊、請款入帳。已勾選的是比較確定的，請看過再按套用。</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.7">找出可能的股票買入、出差代墊、請款入帳，以及學費同步造成的重複紀錄。已勾選的是比較確定的，請看過再按套用。</div>
     <div id="cleanupList" style="max-height:55vh;overflow-y:auto"></div>
     <div style="height:10px"></div>
     <div style="display:flex;gap:8px">
@@ -3011,8 +3011,12 @@ async function addTui(){
   renderTui(); toast('✓ 已記錄');
   await pushToGS(cC==='nora'?'tuitionN':'tuitionD', it);
 
-  // 自動同步一筆到收支記錄
-  if(it.actual > 0) {
+  // 自動同步一筆到收支記錄（收支裡已經記過同金額、日期相近的就先問，避免重複）
+  let _dupRec = null;
+  if(it.actual > 0) _dupRec = findSimilarExp(it.actual, it.date);
+  if(_dupRec && confirm('收支裡 '+_dupRec.date.slice(5).replace('-','/')+' 已經有一筆 '+fmt(_dupRec.amount)+'「'+(_dupRec.note||_dupRec.cat||'')+'」\n\n是同一筆嗎？\n按「確定」= 同一筆，不再新增（建議）\n按「取消」= 不同筆，仍要新增')){
+    toast('✓ 學費已記錄（收支已有，未重複新增）');
+  } else if(it.actual > 0) {
     const catName = {nursery:'托嬰中心',daycare:'公托',kinder:'幼兒園',primary:'國小',aftercare:'安親班',cram:'補習班',talent:'才藝班',other:'其他'}[cTC]||'孩子費用';
     const childName = cC==='nora'?'Nora':'Dennis';
     const rec = {
@@ -3031,6 +3035,12 @@ async function addTui(){
     await pushToGS('records', rec);
     toast('✓ 學費已記錄，並同步至收支');
   }
+}
+// 找收支裡同金額、前後 10 天內的支出（學費同步前檢查重複用）
+function findSimilarExp(amount, date, excludeId){
+  const t0 = new Date(String(date)+'T00:00:00').getTime();
+  return records.find(r=>r.type==='expense' && r.id!==excludeId && Math.abs((+r.amount||0)-amount)<1
+    && Math.abs(new Date(String(r.date)+'T00:00:00').getTime()-t0) <= 10*86400000) || null;
 }
 function renderTui(){
   const list=cC==='nora'?tuitionN:tuitionD;
@@ -3586,18 +3596,29 @@ function openCleanup(){
       .sort((a,b)=>String(b.date).localeCompare(String(a.date)))
       .forEach(r=>cleanupCand.push({k:rule.k, id:r.id, on:rule.sure(r)}));
   });
+  // 學費頁自動產生的收支（備註結尾是（Nora）/（Dennis））如果收支裡已經有手動記的同一筆 → 建議刪掉自動那筆
+  // 也算「學費頁產生」：學費頁同一天、同金額有一筆，而且這筆收支備註是用那間學校名稱開頭
+  const tuiAll = [...(tuitionN||[]), ...(tuitionD||[])];
+  const isAutoTui = r=>r.type==='expense' && (r.autoFrom==='tuition' || (r.cat==='孩子費用' && /（(Nora|Dennis)）$/.test(r.note||''))
+    || tuiAll.some(t=>t.school && t.date===r.date && Math.abs((+(t.actual??t.total)||0)-(+r.amount||0))<1 && String(r.note||'').startsWith(String(t.school).slice(0,2))));
+  records.filter(isAutoTui).sort((a,b)=>String(b.date).localeCompare(String(a.date))).forEach(r=>{
+    const t0 = new Date(r.date+'T00:00:00').getTime();
+    const twin = records.find(x=>x.type==='expense' && x.id!==r.id && !isAutoTui(x) && (x.cat==='孩子費用' || x.date===r.date) && Math.abs((+x.amount||0)-(+r.amount||0))<1
+      && Math.abs(new Date(String(x.date)+'T00:00:00').getTime()-t0) <= 10*86400000);
+    if(twin){ cleanupCand.push({k:'dup', id:r.id, on:true, twin:twin.id}); }
+  });
   const el = document.getElementById('cleanupList');
   if(!cleanupCand.length){
     el.innerHTML = '<div class="empty" style="padding:16px">沒有找到需要整理的紀錄 👍</div>';
   } else {
-    el.innerHTML = CLEAN_RULES.map(rule=>{
+    el.innerHTML = [...CLEAN_RULES, {k:'dup', title:'🧒 學費重複 → 刪除學費頁自動產生的那筆'}].map(rule=>{
       const arr = cleanupCand.filter(c=>c.k===rule.k); if(!arr.length) return '';
       return `<div style="font-size:12px;font-weight:700;margin:10px 0 4px">${rule.title}（${arr.length}）</div>` + arr.map(c=>{
         const r = records.find(x=>x.id===c.id), i = cleanupCand.indexOf(c);
         const esc = String(r.note||r.cat||'—').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
         return `<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--cream);font-size:12px;cursor:pointer">
           <input type="checkbox" ${c.on?'checked':''} onchange="cleanupCand[${i}].on=this.checked" style="margin-top:2px;accent-color:var(--sky)">
-          <span style="flex:1;min-width:0"><span style="color:var(--muted)">${r.date}</span> ${esc}</span>
+          <span style="flex:1;min-width:0"><span style="color:var(--muted)">${r.date}</span> ${esc}${c.twin?(()=>{const tw=records.find(x=>x.id===c.twin);return tw?'<div style="font-size:10px;color:var(--muted)">和 '+tw.date.slice(5).replace('-','/')+'「'+String(tw.note||tw.cat||'').replace(/[&<>"]/g,'')+'」重複，保留這筆</div>':'';})():''}</span>
           <span style="font-family:'DM Mono';white-space:nowrap">${fmt(r.amount)}</span></label>`;
       }).join('');
     }).join('');
@@ -3610,11 +3631,16 @@ async function applyCleanup(){
   if(!sel.length){ toast('沒有勾選任何紀錄'); return; }
   const btn = document.getElementById('cleanupBtn'); btn.disabled = true; btn.textContent = '套用中…';
   const persist = (id,idx)=>{ if(id>9e6) setLS('rn',records.filter(x=>x.id>9e6)); else { const e=getLS('rn_e',{}); e[id]={...records[idx]}; setLS('rn_e',e); } };
-  const cnt = {inv:0,biz:0,reimb:0};
+  const cnt = {inv:0,biz:0,reimb:0,dup:0};
   try {
     for(const c of sel){
       const idx = records.findIndex(r=>r.id===c.id); if(idx<0) continue;
-      if(c.k==='biz'){
+      if(c.k==='dup'){
+        records.splice(idx,1);
+        if(c.id>9e6) setLS('rn',records.filter(x=>x.id>9e6)); else { const d=getLS('rn_d',[]); if(!d.includes(c.id)){ d.push(c.id); setLS('rn_d',d); } }
+        if(typeof removePend==='function') removePend('records', c.id);
+        await deleteInGS('records', c.id);
+      } else if(c.k==='biz'){
         records[idx].isBiz = true; markBizLocal(c.id, true); persist(c.id, idx);
         await updateInGS('records', c.id, {isBiz:true});
       } else {
@@ -3626,7 +3652,7 @@ async function applyCleanup(){
     }
   } finally { btn.disabled = false; btn.textContent = '套用'; }
   closeCleanup();
-  const parts = []; if(cnt.inv) parts.push('投資 '+cnt.inv); if(cnt.biz) parts.push('出差 '+cnt.biz); if(cnt.reimb) parts.push('代墊回收 '+cnt.reimb);
+  const parts = []; if(cnt.inv) parts.push('投資 '+cnt.inv); if(cnt.biz) parts.push('出差 '+cnt.biz); if(cnt.reimb) parts.push('代墊回收 '+cnt.reimb); if(cnt.dup) parts.push('刪除重複 '+cnt.dup);
   toast('✅ 已整理 '+parts.join('、')+' 筆', 3000);
   if(typeof renderList==='function') renderList();
   if(typeof renderBiz==='function') renderBiz();
