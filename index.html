@@ -265,9 +265,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <div class="sal-sw"><table class="sal-tbl" id="salTbl"></table></div>
   </div>
   <div class="card"><div class="ct" style="display:flex;align-items:center;justify-content:space-between">＋ 新增月薪資
-      <button onclick="document.getElementById('salImg').click()" style="padding:4px 11px;border-radius:14px;border:1.5px solid var(--border);background:var(--paper);font-size:11px;color:var(--ink);cursor:pointer;font-family:inherit;font-weight:600">📷 從圖片匯入</button>
+      <button onclick="document.getElementById('salImg').click()" style="padding:4px 11px;border-radius:14px;border:1.5px solid var(--border);background:var(--paper);font-size:11px;color:var(--ink);cursor:pointer;font-family:inherit;font-weight:600">📷 匯入薪資單＋存摺</button>
     </div>
-    <input type="file" id="salImg" accept="image/*" style="display:none" onchange="importSalImg(this)">
+    <input type="file" id="salImg" accept="image/*" multiple style="display:none" onchange="importSalImg(this)">
     <div id="salImgMsg" style="display:none;background:var(--cream);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px;line-height:1.7"></div>
     <div class="fr2 fr">
       <div><label class="fl">年</label><select class="fs" id="salYr"></select></div>
@@ -2719,46 +2719,127 @@ async function preSalImg(file){
   return cv;
 }
 function _loadJs(src){ return new Promise((ok,ng)=>{ const sc=document.createElement('script'); sc.src=src; sc.onload=ok; sc.onerror=()=>ng(new Error('辨識程式載入失敗，請確認網路')); document.head.appendChild(sc); }); }
+// 台銀網銀交易明細：用每個字的位置把同一列的日期、金額、餘額湊起來
+function parseBankWords(words){
+  const isDate = t=>/^(20\d{2})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/.test(t);
+  const money = t=>{ const c=t.replace(/[^\d,.]/g,''); if(!/\d/.test(c) || /^0\d/.test(c)) return null;
+    if(!/,/.test(c) && c.replace(/\D/g,'').length>6) return null; const v=parseFloat(c.replace(/,/g,'')); return isNaN(v)?null:v; };
+  const W = words.map(w=>({...w, t:String(w.t||'').trim(), cy:(w.y0+w.y1)/2})).filter(w=>w.t);
+  const dates = W.filter(w=>isDate(w.t.replace(/[^\d\/\-.]/g,''))).sort((a,b)=>a.cy-b.cy);
+  const rows = dates.map((d,i)=>{
+    const h = d.y1-d.y0;
+    const top = i ? (dates[i-1].cy+d.cy)/2 : d.cy-h*3, bot = i<dates.length-1 ? (d.cy+dates[i+1].cy)/2 : d.cy+h*3;
+    const line = W.filter(w=>w!==d && Math.abs(w.cy-d.cy)<h*0.7 && w.x0>d.x1 && !/:/.test(w.t) && !/-/.test(w.t));
+    const nums = line.map(w=>({w,v:money(w.t)})).filter(o=>o.v!=null && /,/.test(o.w.t)).sort((a,b)=>a.w.x0-b.w.x0);
+    const band = W.filter(w=>w.cy>=top && w.cy<bot).map(w=>w.t).join('');
+    const ds = d.t.replace(/[^\d\/\-.]/g,'').split(/[\/\-.]/);
+    const date = ds[0]+'-'+ds[1].padStart(2,'0')+'-'+ds[2].padStart(2,'0');
+    if(nums.length<2) return {date, band, bad:true};
+    const bal = nums[nums.length-1], amt = nums[nums.length-2];
+    return {date, amount:amt.v, balance:bal.v, ax:amt.w.x1, band};
+  }).filter(r=>!r.bad);
+  // 正負判斷：用相鄰列餘額推算，推不出來就看金額欄位位置
+  rows.forEach((r,i)=>{
+    [rows[i-1],rows[i+1]].forEach(n=>{ if(!n||r.type) return;
+      if(Math.abs(n.balance-(r.balance-r.amount))<1) r.type='income';
+      else if(Math.abs(n.balance-(r.balance+r.amount))<1) r.type='expense'; });
+  });
+  const span = Math.max(1,...W.map(w=>w.x1));
+  rows.forEach(r=>{ if(r.type) return; const k=rows.find(o=>o.type && Math.abs(o.ax-r.ax)<span*0.03);
+    if(k){ r.type=k.type; } else { r.type='income'; r.guess=true; } });
+  rows.forEach(r=>{ r.tdg = /地興|大地|器廠/.test(r.band); });
+  return rows;
+}
+
+
+const SAL_FIELDS = ['sB','sBn','sOT','sMl','sTravel','sRe','sOverseas','sDomestic','sBonus2','sYearEnd','sOth'];
+const SAL_KEY = {sB:'sal',sBn:'bonus',sOT:'gate',sMl:'lunch',sTravel:'travel',sRe:'advance',sOverseas:'overseas',sDomestic:'domestic',sBonus2:'bonus2',sYearEnd:'yearend',sOth:'other'};
+const SAL_BANK_OPTS = [['sB','💰 薪資'],['sBn','🎁 節金'],['sTravel','✈️ 差旅補助'],['sRe','💳 代墊'],['sBonus2','💎 分紅'],['sYearEnd','🧧 年終獎金'],['sOth','📝 其他']];
+let salImp = null;
 async function importSalImg(inp){
-  const f = inp.files && inp.files[0]; inp.value=''; if(!f) return;
+  const files = [...(inp.files||[])]; inp.value=''; if(!files.length) return;
   const msg = document.getElementById('salImgMsg');
   msg.style.display='block'; msg.innerHTML='🔍 準備辨識…第一次要下載中文字庫（約 10MB），之後就快了';
+  let slip = null, bank = [], unknown = 0;
   try{
     if(!window.Tesseract) await _loadJs('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
-    const worker = await Tesseract.createWorker('chi_tra+eng', 1, {logger:m=>{ if(m.status==='recognizing text') msg.innerHTML='🔍 辨識中… '+Math.round((m.progress||0)*100)+'%'; }});
+    const worker = await Tesseract.createWorker('chi_tra+eng', 1, {logger:m=>{ if(m.status==='recognizing text') msg.innerHTML='🔍 辨識中（'+files.length+' 張）… '+Math.round((m.progress||0)*100)+'%'; }});
     await worker.setParameters({tessedit_pageseg_mode:'6', preserve_interword_spaces:'1'});
-    const {data} = await worker.recognize(await preSalImg(f));
+    for(const f of files){
+      const {data} = await worker.recognize(await preSalImg(f), {}, {text:true, blocks:true});
+      const words = [];
+      (data.blocks||[]).forEach(bk=>(bk.paragraphs||[]).forEach(pg=>(pg.lines||[]).forEach(ln=>(ln.words||[]).forEach(w=>words.push({t:w.text,x0:w.bbox.x0,x1:w.bbox.x1,y0:w.bbox.y0,y1:w.bbox.y1})))));
+      const rows = parseBankWords(words);
+      if(rows.length) { bank.push(...rows); continue; }
+      const r = parseSalOcr(data.text||'');
+      if(r.lines.length){ if(!slip) slip = r; else { Object.entries(r.items).forEach(([k,v])=>slip.items[k]=(slip.items[k]||0)+v); slip.lines.push(...r.lines); if(r.total!=null) slip.total=(slip.total||0)+r.total; slip.ym = slip.ym||r.ym; } }
+      else unknown++;
+    }
     await worker.terminate();
-    applySalOcr(parseSalOcr(data.text||''), data.text||'');
-  }catch(e){ msg.innerHTML='⚠️ 辨識失敗：'+(e.message||e)+'<br>可以重新截圖（只截表格、不要縮小）再試一次'; }
-}
-function applySalOcr(r, raw){
-  const msg = document.getElementById('salImgMsg');
-  if(!r.lines.length){
-    const esc = String(raw).slice(0,200).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-    msg.innerHTML = '⚠️ 沒有認出薪資項目，請手動輸入，或截清楚一點再試。<div style="color:var(--muted);font-size:10px;margin-top:4px">辨識到：'+esc+'</div>';
-    return;
-  }
-  if(r.ym){
-    const yEl=document.getElementById('salYr'), mEl=document.getElementById('salMo');
-    if(yEl && [...yEl.options].some(o=>+o.value===r.ym.y)) yEl.value=r.ym.y;
-    if(mEl && r.ym.m>=1 && r.ym.m<=12) mEl.value=r.ym.m;
-  }
-  Object.entries(r.items).forEach(([id,v])=>{
-    if(!v) return;
-    const rule = SAL_OCR_MAP.find(x=>x.id===id);
-    const ck = document.getElementById('ck_'+rule.key);
-    if(ck && !ck.checked){ ck.checked=true; toggleSalItem(rule.key); }
-    const el = document.getElementById(id); if(el) el.value = v;
+  }catch(e){ msg.innerHTML='⚠️ 辨識失敗：'+(e.message||e)+'<br>可以重新截圖（只截表格、不要縮小）再試一次'; return; }
+  if(!slip && !bank.length){ msg.innerHTML='⚠️ 沒有認出薪資單或存摺明細，請截清楚一點再試，或手動輸入。'; return; }
+  // 只取公司轉入的錢；薪資單合計對得上的那筆標成「＝薪資單」
+  const inc = bank.filter(r=>r.type==='income' && r.tdg);
+  const ignored = bank.length - inc.length;
+  const memo = getLS('salBankMap', {});
+  let slipHit = false;
+  const maxUn = Math.max(0, ...inc.filter(r=>!(slip && slip.total!=null && Math.abs(r.amount-slip.total)<1)).map(r=>r.amount));
+  const rows = inc.map(r=>{
+    if(!slipHit && slip && slip.total!=null && Math.abs(r.amount-slip.total)<1){ slipHit = true; return {...r, slip:true}; }
+    return {...r, map: memo[String(r.amount)] || (r.amount===maxUn ? 'sB' : 'sOth')};
   });
+  let ym = slip && slip.ym;
+  const payDate = rows.length ? rows.map(r=>r.date).sort().slice(-1)[0] : null;
+  if(!ym && payDate){ const d=new Date(payDate+'T00:00:00'); d.setMonth(d.getMonth()-1); ym={y:d.getFullYear(), m:d.getMonth()+1}; }
+  salImp = {slip, rows, ym, payDate, ignored, unknown};
+  salImpApply();
+}
+function salImpMap(i, v){
+  if(!salImp || !salImp.rows[i]) return;
+  salImp.rows[i].map = v;
+  const memo = getLS('salBankMap', {}); memo[String(salImp.rows[i].amount)] = v; setLS('salBankMap', memo);
+  salImpApply();
+}
+function salImpApply(){
+  const st = salImp; if(!st) return;
+  const msg = document.getElementById('salImgMsg');
+  if(st.ym){
+    const yEl=document.getElementById('salYr'), mEl=document.getElementById('salMo');
+    if(yEl && [...yEl.options].some(o=>+o.value===st.ym.y)) yEl.value=st.ym.y;
+    if(mEl && st.ym.m>=1 && st.ym.m<=12) mEl.value=st.ym.m;
+  }
+  const f = {};
+  if(st.slip) Object.entries(st.slip.items).forEach(([k,v])=>{ f[k]=(f[k]||0)+v; });
+  st.rows.forEach(r=>{ if(!r.slip) f[r.map]=(f[r.map]||0)+r.amount; });
+  SAL_FIELDS.forEach(id=>{
+    const el=document.getElementById(id), ck=document.getElementById('ck_'+SAL_KEY[id]);
+    if(f[id]){ if(ck && !ck.checked){ ck.checked=true; toggleSalItem(SAL_KEY[id]); } if(el) el.value=f[id]; }
+    else if(el) el.value='';
+  });
+  const nt = document.getElementById('sNote'); if(nt && f.sOth && !nt.value) nt.value='公司轉入';
   calcS();
-  const got = r.lines.reduce((a,x)=>a+x.v,0);
-  const chk = r.total==null ? '<span style="color:var(--muted)">（沒讀到合計，請自行核對）</span>'
-    : Math.abs(got-r.total)<1 ? '<b style="color:var(--inc)">✅ 與單子合計 '+fmt(r.total)+' 相符</b>'
-    : '<b style="color:var(--exp)">⚠️ 加總 '+fmt(got)+'，單子合計 '+fmt(r.total)+'，請核對</b>';
-  msg.innerHTML = (r.ym?'📅 '+r.ym.y+' 年 '+r.ym.m+' 月<br>':'')
-    + r.lines.map(x=>x.label+' '+fmt(x.v)).join('・') + '<br>' + chk
-    + '<div style="color:var(--muted);font-size:10px;margin-top:3px">已填入下方欄位，確認無誤再按「儲存薪資」。午餐和晚餐會合併在「午餐」。</div>';
+  const L = [];
+  if(st.ym) L.push('📅 <b>'+st.ym.y+' 年 '+st.ym.m+' 月薪資</b>'+(st.payDate?'，'+st.payDate.slice(5).replace('-','/')+' 入帳':''));
+  if(salaries.some(x=>+x.year===st.ym?.y && +x.month===st.ym?.m)) L.push('<b style="color:var(--exp)">⚠️ 這個月已經有薪資紀錄，儲存前請確認不是重複</b>');
+  if(st.slip){
+    const got = st.slip.lines.reduce((a,x)=>a+x.v,0);
+    const chk = st.slip.total==null ? '' : Math.abs(got-st.slip.total)<1 ? ' <span style="color:var(--inc)">✅</span>' : ' <b style="color:var(--exp)">⚠️ 加總 '+fmt(got)+' 和合計不符</b>';
+    L.push('🧾 薪資單：'+st.slip.lines.filter(x=>x.v).map(x=>x.label+' '+fmt(x.v)).join('・')+(st.slip.total!=null?'（合計 '+fmt(st.slip.total)+'）':'')+chk);
+  }
+  if(st.rows.length){
+    L.push('🏦 公司轉入：');
+    st.rows.forEach((r,i)=>{
+      L.push('<div style="display:flex;align-items:center;gap:8px;padding:3px 0 3px 10px"><span style="font-family:\'DM Mono\';min-width:70px">'+fmt(r.amount)+'</span>'
+        + (r.slip ? '<span style="color:var(--inc)">＝ 薪資單合計 ✅</span>'
+          : '<select class="fs" style="padding:3px 6px;font-size:12px;width:auto" onchange="salImpMap('+i+',this.value)">'+SAL_BANK_OPTS.map(([v,l])=>'<option value="'+v+'"'+(v===r.map?' selected':'')+'>'+l+'</option>').join('')+'</select>')
+        + (r.guess?' <span style="color:var(--muted);font-size:10px">（存入/支出不確定）</span>':'')+'</div>');
+    });
+    if(st.slip && st.slip.total!=null && !st.rows.some(r=>r.slip)) L.push('<span style="color:var(--exp)">⚠️ 存摺裡沒找到和薪資單合計一樣的金額</span>');
+  } else if(st.slip) L.push('<span style="color:var(--muted)">（沒有存摺明細，入帳日會用預設 6 號）</span>');
+  if(st.ignored) L.push('<span style="color:var(--muted);font-size:10px">另有 '+st.ignored+' 筆非公司轉入的交易，已略過</span>');
+  if(st.unknown) L.push('<span style="color:var(--muted);font-size:10px">有 '+st.unknown+' 張圖沒認出內容</span>');
+  L.push('<div style="color:var(--muted);font-size:10px;margin-top:3px">已填入下方欄位，確認無誤再按「儲存薪資」。轉入項目選過一次會記住，下個月同金額自動帶入。</div>');
+  msg.innerHTML = L.join('<br>').replace(/<br><div/g,'<div').replace(/<\/div><br>/g,'</div>');
 }
 
 function calcS(){
@@ -2810,7 +2891,7 @@ async function addSal(){
   // 自動同步一筆薪資入帳到收支記錄
   const salMonth = String(s.month).padStart(2,'0');
   // 發薪日由使用者在收支記錄自行確認（預設當月，日期空白）
-  const salDate = s.year + '-' + salMonth + '-06';  // 預設6號，可於收支頁點記錄修改
+  const salDate = (salImp && salImp.payDate && salImp.ym && salImp.ym.y===s.year && salImp.ym.m===s.month) ? salImp.payDate : s.year + '-' + salMonth + '-06';  // 有匯入存摺就用實際入帳日，否則預設6號
   const salRec = {
     id: Date.now()+9e6+1,
     date: salDate,
@@ -2826,6 +2907,7 @@ async function addSal(){
   setLS('rn', records.filter(x=>x.id>9e6));
   await pushToGS('records', salRec);
   toast('✓ 薪資已儲存，並同步至收支（' + salDate + '）');
+  if(salImp){ salImp=null; const _m=document.getElementById('salImgMsg'); if(_m) _m.style.display='none'; }
 }
 function cancelEditSal(){
   editSalId = null;
