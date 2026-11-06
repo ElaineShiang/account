@@ -206,7 +206,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <input class="srch" type="search" id="srch" placeholder="搜尋金額、備註…" oninput="doSearch()">
     <button class="srch-clr" onclick="clearSrch()">清除</button>
   </div>
-  <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+  <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">
+    <button onclick="openCleanup()" style="padding:5px 14px;border-radius:16px;border:1.5px solid var(--border);background:var(--paper);font-size:12px;color:var(--muted);cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600">🧹 整理歷史</button>
     <button id="batchBtn" onclick="toggleBatch()" style="padding:5px 14px;border-radius:16px;border:1.5px solid var(--border);background:var(--paper);font-size:12px;color:var(--muted);cursor:pointer;font-family:'Noto Serif TC',serif;font-weight:600;transition:all .15s">
       ☑ 批次編輯
     </button>
@@ -263,7 +264,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <div class="card"><div class="ct">📐 薪資結構歷程</div>
     <div class="sal-sw"><table class="sal-tbl" id="salTbl"></table></div>
   </div>
-  <div class="card"><div class="ct">＋ 新增月薪資</div>
+  <div class="card"><div class="ct" style="display:flex;align-items:center;justify-content:space-between">＋ 新增月薪資
+      <button onclick="document.getElementById('salImg').click()" style="padding:4px 11px;border-radius:14px;border:1.5px solid var(--border);background:var(--paper);font-size:11px;color:var(--ink);cursor:pointer;font-family:inherit;font-weight:600">📷 從圖片匯入</button>
+    </div>
+    <input type="file" id="salImg" accept="image/*" style="display:none" onchange="importSalImg(this)">
+    <div id="salImgMsg" style="display:none;background:var(--cream);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px;line-height:1.7"></div>
     <div class="fr2 fr">
       <div><label class="fl">年</label><select class="fs" id="salYr"></select></div>
       <div><label class="fl">月</label><select class="fs" id="salMo">
@@ -1165,6 +1170,22 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   </div>
 </div>
 
+<!-- 整理歷史紀錄 Modal -->
+<div class="modal-bg" id="cleanupModal">
+  <div class="modal">
+    <div class="modal-ttl">🧹 整理歷史紀錄
+      <button class="modal-x" onclick="closeCleanup()">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.7">依備註關鍵字找出可能的股票買入、出差代墊、請款入帳。已勾選的是比較確定的，請看過再按套用。</div>
+    <div id="cleanupList" style="max-height:55vh;overflow-y:auto"></div>
+    <div style="height:10px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="sbtn sec" onclick="closeCleanup()">取消</button>
+      <button class="sbtn" id="cleanupBtn" onclick="applyCleanup()">套用</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1498,7 +1519,38 @@ const fmt  = n => {
 const fmtK = n => { if(!n) return '$0'; const a=Math.abs(Math.round(n)); return (n<0?'-':'')+'$'+(a>=10000?Math.round(a/1000)+'K':a.toLocaleString('zh-TW')); };
 const pct  = n => Math.round(n*10)/10+'%';
 const today= () => { const tw=new Date(Date.now()+8*3600000); return tw.toISOString().slice(0,10); };
-const sum  = (rs,t) => rs.filter(r=>r.type===t).reduce((a,b)=>a+b.amount,0);
+// ── 收支計算：投資買入、代墊回收、出差代墊不算收支（錢只是換地方放／先墊後拿回）──
+const PL_EXCL_CATS = ['投資買入','代墊回收'];
+// 已入帳的出差請款：從對應的收入（另筆轉帳或薪資入帳）扣掉代墊金額，多收的才算收入、少收的才算損失
+function bizReimbMap(){
+  const m = {};
+  (records||[]).forEach(r=>{
+    if(!isBizRec(r)) return;
+    const b = getBiz(r); if(!b || b.s!=='paid' || !b.ref) return;
+    let tid = null;
+    if(b.via==='salary'){
+      const sl = (salaries||[]).find(x=>String(x.id)===String(b.ref));
+      if(sl){
+        const ym = sl.year+'-'+String(sl.month).padStart(2,'0'), nt = sl.year+'年'+sl.month+'月薪資';
+        const inc = records.filter(x=>x.type==='income');
+        const ir = inc.find(x=>x.cat==='薪資入帳' && String(x.date||'').startsWith(ym))
+                || inc.find(x=>String(x.note||'').includes(nt));
+        if(ir) tid = ir.id;
+      }
+    } else tid = b.ref;
+    if(tid!=null) m[String(tid)] = (m[String(tid)]||0) + (+r.amount||0);
+  });
+  return m;
+}
+function plAmt(r, m){
+  if(!r) return 0;
+  const a = +r.amount||0;
+  if(PL_EXCL_CATS.includes(r.cat)) return 0;
+  if(r.type==='expense') return isBizRec(r) ? 0 : a;
+  if(r.type==='income') return Math.max(0, a - ((m||{})[String(r.id)]||0));
+  return a;
+}
+const sum  = (rs,t) => { const m=bizReimbMap(); return rs.filter(r=>r.type===t).reduce((a,b)=>a+plAmt(b,m),0); };
 function toast(m,d=2200) { const e=document.getElementById('toast'); e.textContent=m; e.classList.add('on'); setTimeout(()=>e.classList.remove('on'),d); }
 function setSyncStatus(state, msg) {
   const dot = document.getElementById('syncDot');
@@ -1978,12 +2030,12 @@ function renderList() {
   list = [...list].sort((a,b)=>pref==='date_asc'?a.date.localeCompare(b.date):b.date.localeCompare(a.date));
 
   // 按日期分組
-  const byDate = {};
+  const byDate = {}, _pm = bizReimbMap();
   list.forEach(r => {
     const d = r.date.slice(0,10);
     if(!byDate[d]) byDate[d] = {exp:0, inc:0, rows:[]};
-    if(r.type==='expense') byDate[d].exp += r.amount;
-    else byDate[d].inc += r.amount;
+    if(r.type==='expense') byDate[d].exp += plAmt(r,_pm);
+    else byDate[d].inc += plAmt(r,_pm);
     byDate[d].rows.push(r);
   });
 
@@ -2065,6 +2117,12 @@ function buildRecRow(r, showDate){
     if(_bs==='claimed') badge.style.background = 'var(--gold)';
     badge.textContent = _bs==='paid' ? '💼已入帳' : _bs==='claimed' ? '💼已請款' : '💼待請款';
     rn.appendChild(badge);
+  }
+  if(PL_EXCL_CATS.includes(r.cat)) {
+    const nb = document.createElement('span');
+    nb.style.cssText = 'background:var(--muted);color:#fff;font-size:9px;padding:1px 5px;border-radius:5px;margin-right:4px;vertical-align:middle';
+    nb.textContent = r.cat==='投資買入' ? '📈不計收支' : '💳不計收支';
+    rn.appendChild(nb);
   }
   rn.appendChild(document.createTextNode(r.note||r.cat||'—'));
   rb.appendChild(rn);
@@ -2152,7 +2210,7 @@ function renderAna(){
   document.getElementById('aSR').style.color=sr>=40?'var(--inc)':'var(--exp)';
   const ms=Array.from({length:12},(_,i)=>i+1);
   const mE={},mI={};ms.forEach(m=>{mE[m]=0;mI[m]=0});
-  yr.forEach(r=>{const m=+r.date.slice(5,7);if(r.type==='expense')mE[m]+=r.amount;else mI[m]+=r.amount});
+  const _pm=bizReimbMap();yr.forEach(r=>{const m=+r.date.slice(5,7);if(r.type==='expense')mE[m]+=plAmt(r,_pm);else mI[m]+=plAmt(r,_pm)});
   const maxM=Math.max(...ms.flatMap(m=>[mE[m],mI[m]]),1);
   document.getElementById('aMB').innerHTML=ms.map(m=>`<div style="margin-bottom:6px"><div style="font-size:9px;color:var(--muted);margin-bottom:2px">${m}月</div>
     <div style="display:flex;gap:4px;align-items:center;margin-bottom:1px"><div class="btrk"><div class="bE" style="width:${Math.round(mE[m]/maxM*100)}%"></div></div><div class="bval" style="color:var(--exp)">${mE[m]?fmtK(mE[m]):''}</div></div>
@@ -2168,7 +2226,7 @@ function renderAna(){
   // 出差費用請款追蹤
   renderBiz();
 
-  const topE=[...records].filter(r=>r.type==='expense').sort((a,b)=>b.amount-a.amount).slice(0,10);
+  const topE=[...records].filter(r=>r.type==='expense'&&plAmt(r)>0).sort((a,b)=>b.amount-a.amount).slice(0,10);
   document.getElementById('aTop').innerHTML=topE.map((r,i)=>`<div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--cream)"><div style="font-size:10px;color:var(--muted);width:14px;flex-shrink:0">${i+1}</div><div style="flex:1;min-width:0"><div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.note||'—'}</div><div style="font-size:10px;color:var(--muted)">${r.date}</div></div><div style="font-family:'DM Mono';font-size:12px;color:var(--exp);font-weight:600;flex-shrink:0">${fmt(r.amount)}</div></div>`).join('');
 }
 function setAY(y){aY=y;renderAna()}
@@ -2557,7 +2615,7 @@ function dlReport(){
   const tE=sum(recs,'expense'),tI=sum(recs,'income'),sr=tI>0?(1-tE/tI)*100:0;
   const ms=Array.from({length:12},(_,i)=>i+1);
   const mE={},mI={};ms.forEach(m=>{mE[m]=0;mI[m]=0});
-  recs.forEach(r=>{const m=+r.date.slice(5,7);if(r.type==='expense')mE[m]+=r.amount;else mI[m]+=r.amount});
+  const _pm=bizReimbMap();recs.forEach(r=>{const m=+r.date.slice(5,7);if(r.type==='expense')mE[m]+=plAmt(r,_pm);else mI[m]+=plAmt(r,_pm)});
   const tN=(tuitionN||[]).filter(t=>t.date&&t.date.startsWith(yr));
   const tD=(tuitionD||[]).filter(t=>t.date&&t.date.startsWith(yr));
   const f2=n=>n?'$'+Math.round(n).toLocaleString('zh-TW'):'$0';
@@ -2609,6 +2667,98 @@ function toggleSalItem(key) {
     inputs?.forEach(i => i.value = '');
   }
   calcS();
+}
+
+// ══ 薪資單圖片匯入（瀏覽器內辨識，圖片不會上傳）══
+const SAL_OCR_MAP = [
+  {re:/[國国]\s*[內内]\s*出\s*差/, id:'sDomestic', key:'domestic'},
+  {re:/[國国]\s*外\s*出\s*差/,     id:'sOverseas', key:'overseas'},
+  {re:/[門门]\s*禁/,               id:'sOT',       key:'gate'},
+  {re:/[午晚]\s*餐/,               id:'sMl',       key:'lunch'},
+  {re:/差\s*旅/,                   id:'sTravel',   key:'travel'},
+  {re:/代\s*墊/,                   id:'sRe',       key:'advance'},
+  {re:/分\s*紅/,                   id:'sBonus2',   key:'bonus2'},
+  {re:/年\s*終/,                   id:'sYearEnd',  key:'yearend'},
+  {re:/節\s*金/,                   id:'sBn',       key:'bonus'},
+  {re:/[本底]?\s*薪\s*[資资俸]/,    id:'sB',        key:'sal'}
+];
+function parseSalOcr(text){
+  const res = {items:{}, lines:[], total:null, ym:null};
+  const d = String(text).match(/(1\d{2})\s*[.\-\/年]\s*(\d{1,2})\s*[.\-\/月]\s*\d{1,2}/);
+  if(d) res.ym = {y:+d[1]+1911, m:+d[2]};
+  String(text).split(/\r?\n/).forEach(line=>{
+    const L = line.replace(/\s+/g,' ').trim(); if(!L) return;
+    const t = L.replace(/[A-Za-z]+\s*:?\s*\d+/g,' ')            // 備註代號 US24
+               .replace(/\d{1,2}\s*\/\s*\d{1,2}/g,' ')           // 備註日期 10/22
+               .replace(/(\d)\s*[,，.]\s*(\d{3})(?!\d)/g,'$1$2'); // 千分位 8,768
+    const nums = (t.match(/\d+(?:\.\d+)?/g)||[]).map(Number);
+    if(/合\s*計|總\s*計/.test(L)){ if(nums.length) res.total = nums[nums.length-1]; return; }
+    const rule = SAL_OCR_MAP.find(r=>r.re.test(L));
+    if(!rule || !nums.length) return;
+    const v = nums[nums.length-1];   // 小計在最後一欄
+    res.items[rule.id] = (res.items[rule.id]||0) + v;
+    res.lines.push({label:L.match(rule.re)[0].replace(/\s/g,''), v});
+  });
+  return res;
+}
+// 前處理：放大、黑白化、去掉表格格線（格線會讓辨識亂掉）
+async function preSalImg(file){
+  const img = await new Promise((ok,ng)=>{ const u=URL.createObjectURL(file), im=new Image(); im.onload=()=>{URL.revokeObjectURL(u);ok(im);}; im.onerror=()=>ng(new Error('圖片讀取失敗')); im.src=u; });
+  const k = Math.max(1, Math.min(3, 3600/Math.max(img.width,1)));
+  const W = Math.round(img.width*k), H = Math.round(img.height*k);
+  const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
+  const cx = cv.getContext('2d'); cx.imageSmoothingQuality='high'; cx.drawImage(img,0,0,W,H);
+  const id = cx.getImageData(0,0,W,H), px = id.data, dark = new Uint8Array(W*H);
+  const rowC = new Uint32Array(H), colC = new Uint32Array(W);
+  for(let i=0;i<W*H;i++){ const g=0.299*px[i*4]+0.587*px[i*4+1]+0.114*px[i*4+2]; if(g<150){ dark[i]=1; rowC[(i/W)|0]++; colC[i%W]++; } }
+  const clr = new Uint8Array(W*H);
+  for(let y=0;y<H;y++) if(rowC[y]>W*0.4) for(let d=-2;d<=2;d++){ const yy=y+d; if(yy>=0&&yy<H) clr.fill(1,yy*W,yy*W+W); }
+  for(let x=0;x<W;x++) if(colC[x]>H*0.3) for(let d=-2;d<=2;d++){ const xx=x+d; if(xx>=0&&xx<W) for(let y=0;y<H;y++) clr[y*W+xx]=1; }
+  for(let i=0;i<W*H;i++){ const v=(dark[i]&&!clr[i])?0:255; px[i*4]=px[i*4+1]=px[i*4+2]=v; px[i*4+3]=255; }
+  cx.putImageData(id,0,0);
+  return cv;
+}
+function _loadJs(src){ return new Promise((ok,ng)=>{ const sc=document.createElement('script'); sc.src=src; sc.onload=ok; sc.onerror=()=>ng(new Error('辨識程式載入失敗，請確認網路')); document.head.appendChild(sc); }); }
+async function importSalImg(inp){
+  const f = inp.files && inp.files[0]; inp.value=''; if(!f) return;
+  const msg = document.getElementById('salImgMsg');
+  msg.style.display='block'; msg.innerHTML='🔍 準備辨識…第一次要下載中文字庫（約 10MB），之後就快了';
+  try{
+    if(!window.Tesseract) await _loadJs('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    const worker = await Tesseract.createWorker('chi_tra+eng', 1, {logger:m=>{ if(m.status==='recognizing text') msg.innerHTML='🔍 辨識中… '+Math.round((m.progress||0)*100)+'%'; }});
+    await worker.setParameters({tessedit_pageseg_mode:'6', preserve_interword_spaces:'1'});
+    const {data} = await worker.recognize(await preSalImg(f));
+    await worker.terminate();
+    applySalOcr(parseSalOcr(data.text||''), data.text||'');
+  }catch(e){ msg.innerHTML='⚠️ 辨識失敗：'+(e.message||e)+'<br>可以重新截圖（只截表格、不要縮小）再試一次'; }
+}
+function applySalOcr(r, raw){
+  const msg = document.getElementById('salImgMsg');
+  if(!r.lines.length){
+    const esc = String(raw).slice(0,200).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    msg.innerHTML = '⚠️ 沒有認出薪資項目，請手動輸入，或截清楚一點再試。<div style="color:var(--muted);font-size:10px;margin-top:4px">辨識到：'+esc+'</div>';
+    return;
+  }
+  if(r.ym){
+    const yEl=document.getElementById('salYr'), mEl=document.getElementById('salMo');
+    if(yEl && [...yEl.options].some(o=>+o.value===r.ym.y)) yEl.value=r.ym.y;
+    if(mEl && r.ym.m>=1 && r.ym.m<=12) mEl.value=r.ym.m;
+  }
+  Object.entries(r.items).forEach(([id,v])=>{
+    if(!v) return;
+    const rule = SAL_OCR_MAP.find(x=>x.id===id);
+    const ck = document.getElementById('ck_'+rule.key);
+    if(ck && !ck.checked){ ck.checked=true; toggleSalItem(rule.key); }
+    const el = document.getElementById(id); if(el) el.value = v;
+  });
+  calcS();
+  const got = r.lines.reduce((a,x)=>a+x.v,0);
+  const chk = r.total==null ? '<span style="color:var(--muted)">（沒讀到合計，請自行核對）</span>'
+    : Math.abs(got-r.total)<1 ? '<b style="color:var(--inc)">✅ 與單子合計 '+fmt(r.total)+' 相符</b>'
+    : '<b style="color:var(--exp)">⚠️ 加總 '+fmt(got)+'，單子合計 '+fmt(r.total)+'，請核對</b>';
+  msg.innerHTML = (r.ym?'📅 '+r.ym.y+' 年 '+r.ym.m+' 月<br>':'')
+    + r.lines.map(x=>x.label+' '+fmt(x.v)).join('・') + '<br>' + chk
+    + '<div style="color:var(--muted);font-size:10px;margin-top:3px">已填入下方欄位，確認無誤再按「儲存薪資」。午餐和晚餐會合併在「午餐」。</div>';
 }
 
 function calcS(){
@@ -3319,6 +3469,72 @@ async function submitTuiQuick(){
   if(tqChild==='nora'){tuitionN.unshift(it);setLS('tn',tuitionN.filter(x=>x.id>9e6));await pushToGS('tuitionN',it)}
   else{tuitionD.unshift(it);setLS('td',tuitionD.filter(x=>x.id>9e6));await pushToGS('tuitionD',it)}
   closeTuiQuick(); toast('學費已同步到學費頁！');
+}
+
+// ══ 整理歷史紀錄 ══
+const CLEAN_RULES = [
+  {k:'inv', title:'📈 股票／ETF 買入 → 改類別「投資買入」', type:'expense',
+   test:r=>r.cat!=='投資買入' && /股票|ETF|0050|0056|00878|00919|台積電|元大台灣|定期定額|證券|買股|零股/i.test(r.note||''), sure:()=>true},
+  {k:'biz', title:'💼 出差代墊 → 標記出差', type:'expense',
+   test:r=>!isBizRec(r) && /出差|差旅|請款|代墊|報帳|機票|飯店|住宿|hotel|租車|簽證/i.test(r.note||''),
+   sure:r=>/出差|差旅|請款|代墊|報帳/.test(r.note||'')},
+  {k:'reimb', title:'💳 請款入帳 → 改類別「代墊回收」', type:'income',
+   test:r=>r.cat!=='代墊回收' && !/薪資/.test(r.note||'') && /請款|代墊|出差費|差旅費|報帳|退款/.test(r.note||''),
+   sure:r=>/請款|代墊|出差費|差旅費|報帳/.test(r.note||'')}
+];
+let cleanupCand = [];
+function openCleanup(){
+  cleanupCand = [];
+  CLEAN_RULES.forEach(rule=>{
+    records.filter(r=>r.id!==BIZ_META_ID && r.type===rule.type && rule.test(r))
+      .sort((a,b)=>String(b.date).localeCompare(String(a.date)))
+      .forEach(r=>cleanupCand.push({k:rule.k, id:r.id, on:rule.sure(r)}));
+  });
+  const el = document.getElementById('cleanupList');
+  if(!cleanupCand.length){
+    el.innerHTML = '<div class="empty" style="padding:16px">沒有找到需要整理的紀錄 👍</div>';
+  } else {
+    el.innerHTML = CLEAN_RULES.map(rule=>{
+      const arr = cleanupCand.filter(c=>c.k===rule.k); if(!arr.length) return '';
+      return `<div style="font-size:12px;font-weight:700;margin:10px 0 4px">${rule.title}（${arr.length}）</div>` + arr.map(c=>{
+        const r = records.find(x=>x.id===c.id), i = cleanupCand.indexOf(c);
+        const esc = String(r.note||r.cat||'—').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+        return `<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--cream);font-size:12px;cursor:pointer">
+          <input type="checkbox" ${c.on?'checked':''} onchange="cleanupCand[${i}].on=this.checked" style="margin-top:2px;accent-color:var(--sky)">
+          <span style="flex:1;min-width:0"><span style="color:var(--muted)">${r.date}</span> ${esc}</span>
+          <span style="font-family:'DM Mono';white-space:nowrap">${fmt(r.amount)}</span></label>`;
+      }).join('');
+    }).join('');
+  }
+  document.getElementById('cleanupModal').classList.add('on');
+}
+function closeCleanup(){ document.getElementById('cleanupModal').classList.remove('on'); }
+async function applyCleanup(){
+  const sel = cleanupCand.filter(c=>c.on);
+  if(!sel.length){ toast('沒有勾選任何紀錄'); return; }
+  const btn = document.getElementById('cleanupBtn'); btn.disabled = true; btn.textContent = '套用中…';
+  const persist = (id,idx)=>{ if(id>9e6) setLS('rn',records.filter(x=>x.id>9e6)); else { const e=getLS('rn_e',{}); e[id]={...records[idx]}; setLS('rn_e',e); } };
+  const cnt = {inv:0,biz:0,reimb:0};
+  try {
+    for(const c of sel){
+      const idx = records.findIndex(r=>r.id===c.id); if(idx<0) continue;
+      if(c.k==='biz'){
+        records[idx].isBiz = true; markBizLocal(c.id, true); persist(c.id, idx);
+        await updateInGS('records', c.id, {isBiz:true});
+      } else {
+        const cat = c.k==='inv' ? '投資買入' : '代墊回收';
+        records[idx].cat = cat; persist(c.id, idx);
+        await updateInGS('records', c.id, {cat});
+      }
+      cnt[c.k]++;
+    }
+  } finally { btn.disabled = false; btn.textContent = '套用'; }
+  closeCleanup();
+  const parts = []; if(cnt.inv) parts.push('投資 '+cnt.inv); if(cnt.biz) parts.push('出差 '+cnt.biz); if(cnt.reimb) parts.push('代墊回收 '+cnt.reimb);
+  toast('✅ 已整理 '+parts.join('、')+' 筆', 3000);
+  if(typeof renderList==='function') renderList();
+  if(typeof renderBiz==='function') renderBiz();
+  if(curPg==='dash' && typeof renderDash==='function') renderDash();
 }
 
 // ══ 批次編輯 ══
@@ -4241,11 +4457,12 @@ function renderPlan() {
   // 彙整月份收支
   const byM={};
   months.forEach(m=>{ byM[m]={inc:0,exp:0}; });
-  const incCats={}, expCats={};
+  const incCats={}, expCats={}, _pm=bizReimbMap();
   (records||[]).forEach(r=>{
     const m=(r.date||'').substring(0,7);
     if(!mSet.has(m)) return;
-    const amt=r.amount||0, cat=r.cat||'未分類';
+    const amt=plAmt(r,_pm), cat=r.cat||'未分類';
+    if(!amt) return;
     if(r.type==='income'){ byM[m].inc+=amt; incCats[cat]=(incCats[cat]||0)+amt; }
     else if(r.type==='expense'){ byM[m].exp+=amt; expCats[cat]=(expCats[cat]||0)+amt; }
   });
