@@ -4513,8 +4513,16 @@ function _savePlanAssets() {
 function checkPlanReminder() {
   const last = localStorage.getItem('plan_reminder_ts');
   const QUARTER_MS = 90*24*3600*1000;
+  // 只有「第一次記帳 90 天後」才提醒，避免初次使用就跳出 modal 影響操作
+  const firstUse = localStorage.getItem('first_use_ts');
+  if(!firstUse) {
+    localStorage.setItem('first_use_ts', String(Date.now()));
+    return; // 首次使用不提醒
+  }
+  const firstUseAge = Date.now() - parseInt(firstUse);
+  if(firstUseAge < QUARTER_MS) return; // 使用未滿 90 天不提醒
   if(!last || Date.now()-parseInt(last) > QUARTER_MS) {
-    setTimeout(()=>{ const m=document.getElementById('planReminderModal'); if(m) m.classList.add('on'); }, 1800);
+    setTimeout(()=>{ const m=document.getElementById('planReminderModal'); if(m) m.classList.add('on'); }, 5000);
   }
 }
 
