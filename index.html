@@ -4327,6 +4327,7 @@ async function submitDivQuick() {
   }
 
   closeDivQuick();
+  saveBundleStocks();  // 把彙整版本存到 localStorage，重整後還看得到
   toast('✅ 配息已同步！');
   if(curPg === 'assets') renderSk();
   if(curPg === 'invest') renderInvest();
@@ -4397,6 +4398,7 @@ async function submitBuyQuick() {
   }
 
   closeBuyQuick();
+  saveBundleStocks();  // 把彙整版本存到 localStorage，重整後還看得到
   toast('✅ 買入記錄已同步！');
   if(curPg === 'assets') renderSk();
   if(curPg === 'invest') renderInvest();
@@ -4508,6 +4510,26 @@ function loadPlanAssets() {
 
 function _savePlanAssets() {
   try { localStorage.setItem('plan_assets', JSON.stringify(_planAssets)); } catch(e) {}
+}
+
+// ── BUNDLE.stocks 本機持久化：讓收支頁填入的買入/配息重整後還看得到 ──
+const BUNDLE_STOCKS_KEY = 'bundle_stocks_v1';
+function saveBundleStocks() {
+  try { localStorage.setItem(BUNDLE_STOCKS_KEY, JSON.stringify(BUNDLE.stocks || [])); } catch(e) {}
+}
+function loadBundleStocks() {
+  try {
+    const raw = localStorage.getItem(BUNDLE_STOCKS_KEY);
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    if(!Array.isArray(saved) || !saved.length) return;
+    // 合併：以 localStorage 的彙整資料為主（含使用者新增的買入/配息）
+    // 若 BUNDLE.stocks 有 localStorage 沒有的股票，也保留
+    const map = {};
+    (BUNDLE.stocks || []).forEach(s => { map[s.code] = {...s}; });
+    saved.forEach(s => { map[s.code] = s; }); // localStorage 版本蓋過 BUNDLE 版本
+    BUNDLE.stocks = Object.values(map);
+  } catch(e) {}
 }
 
 function checkPlanReminder() {
@@ -4703,6 +4725,9 @@ function drawPlanDonut(id,cats) {
 }
 
 (function init() {
+  // 從 localStorage 恢復使用者新增的買入/配息（BUNDLE.stocks 只有靜態資料）
+  if(typeof loadBundleStocks === 'function') loadBundleStocks();
+
   // 初始日期
   const now = new Date();
   const hdrDate = document.getElementById('hdrDate');
