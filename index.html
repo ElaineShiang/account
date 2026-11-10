@@ -4301,10 +4301,12 @@ function renderInvest() {
       '<details style="margin-top:8px">'+
         '<summary style="font-size:11px;color:var(--sky);cursor:pointer">查看買入記錄</summary>'+
         '<div style="margin-top:6px">'+
-          (s.buys||[]).map(b =>
-            '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--cream);font-size:11px">'+
-              '<span>'+b.date+' @$'+b.price+' × '+b.shares+'股</span>'+
-              '<span style="color:var(--muted)">'+fmt(b.cost)+'</span>'+
+          (s.buys||[]).map((b,bi) =>
+            '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--cream);font-size:11px">'+
+              '<span style="flex:1">'+b.date+' @$'+b.price+' × '+b.shares+'股</span>'+
+              '<span style="color:var(--muted);min-width:60px;text-align:right">'+fmt(b.cost)+'</span>'+
+              '<button onclick="editBuyRecord(\''+s.code+'\','+bi+')" style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border);background:var(--paper);cursor:pointer;color:var(--sky)">✏️</button>'+
+              '<button onclick="deleteBuyRecord(\''+s.code+'\','+bi+')" style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--border);background:var(--paper);cursor:pointer;color:var(--exp)">🗑</button>'+
             '</div>'
           ).join('')+
         '</div>'+
@@ -4323,6 +4325,52 @@ function renderInvest() {
   if(pnlEl) { pnlEl.textContent = totalVal ? (totalPnl>=0?'+':'')+fmt(totalPnl) : '—'; pnlEl.style.color = totalPnl>=0?'var(--inc)':'var(--exp)'; }
   const retEl = document.getElementById('inv-ret');
   if(retEl) { retEl.textContent = totalRet ? (totalRet>=0?'+':'')+totalRet.toFixed(1)+'%' : '—'; retEl.style.color = totalRet>=0?'var(--inc)':'var(--exp)'; }
+}
+
+// ── 投資買入記錄：編輯日期 / 刪除 ──
+function editBuyRecord(code, buyIdx) {
+  const bStock = (BUNDLE.stocks||[]).find(s => s.code === code);
+  if(!bStock || !bStock.buys || !bStock.buys[buyIdx]) return;
+  const b = bStock.buys[buyIdx];
+  const newDate = prompt('修改買入日期（格式 YYYY-MM-DD）：', b.date);
+  if(!newDate || newDate === b.date) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { toast('⚠️ 日期格式錯誤，請用 YYYY-MM-DD'); return; }
+  bStock.buys[buyIdx] = {...b, date: newDate};
+  // 同步更新 flat stocks
+  const flatRec = stocks.find(s => s.code === code && s.date === b.date && Math.abs((s.total||s.amount||0) - (b.cost||0)) < 1);
+  if(flatRec) { flatRec.date = newDate; updateInGS('stocks', flatRec.id, {date: newDate}); }
+  saveBundleStocks();
+  renderInvest();
+  toast('✅ 日期已更新');
+}
+
+function deleteBuyRecord(code, buyIdx) {
+  const bStock = (BUNDLE.stocks||[]).find(s => s.code === code);
+  if(!bStock || !bStock.buys || !bStock.buys[buyIdx]) return;
+  const b = bStock.buys[buyIdx];
+  if(!confirm('確定刪除這筆買入記錄？\n'+b.date+' @$'+b.price+' × '+b.shares+'股')) return;
+  // 從 BUNDLE.stocks 刪除
+  bStock.buys.splice(buyIdx, 1);
+  bStock.total_shares = bStock.buys.reduce((s,b)=>s+(b.shares||0), 0);
+  bStock.total_cost   = bStock.buys.reduce((s,b)=>s+(b.cost||0), 0);
+  // 從 flat stocks 刪除並同步 GS
+  const flatIdx = stocks.findIndex(s => s.code === code && s.date === b.date && Math.abs((s.total||0) - (b.cost||0)) < 1);
+  if(flatIdx >= 0) {
+    const flatId = stocks[flatIdx].id;
+    stocks.splice(flatIdx, 1);
+    deleteInGS('stocks', flatId);
+    // 也從收支記錄刪除（如果有對應的投資買入記錄）
+    const recIdx = records.findIndex(r => r.cat==='投資買入' && r.date===b.date && Math.abs(r.amount-(b.cost||0))<1);
+    if(recIdx >= 0) {
+      const recId = records[recIdx].id;
+      records.splice(recIdx, 1);
+      deleteInGS('records', recId);
+    }
+  }
+  saveBundleStocks();
+  renderInvest();
+  if(curPg==='ie') renderIE();
+  toast('🗑 已刪除');
 }
 
 // ══ 投資同步（配息/買入）══
