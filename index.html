@@ -1946,8 +1946,59 @@ async function saveE() {
     isBiz: document.getElementById('eBiz')?.checked || false
   };
   const idx = records.findIndex(r=>r.id===id);
+  const oldRec = idx>=0 ? records[idx] : null;
   if(idx>=0) records[idx] = {...records[idx],...ch};
   if(idx>=0 && ch.type==='expense') markBizLocal(id, ch.isBiz);
+
+  // 如果是「投資買入」且日期/金額有改，同步更新 BUNDLE.stocks 裡的買入記錄
+  if(oldRec && (ch.cat==='投資買入' || oldRec.cat==='投資買入')) {
+    // 找出對應的 flat stocks 記錄（by id），取得股票代號
+    const flatRec = stocks.find(s => String(s.id) === String(id));
+    if(flatRec) {
+      const bStock = (BUNDLE.stocks||[]).find(s => s.code === flatRec.code);
+      if(bStock && bStock.buys) {
+        // 找到同日期同金額的買入記錄（用原始日期和金額匹配）
+        const buyIdx = bStock.buys.findIndex(b =>
+          b.date === (oldRec.date || ch.date) &&
+          Math.abs(b.cost - (oldRec.amount || ch.amount)) < 1
+        );
+        if(buyIdx >= 0) {
+          const oldBuy = bStock.buys[buyIdx];
+          bStock.buys[buyIdx] = {...oldBuy, date: ch.date, cost: ch.amount, amount: ch.amount};
+          // 重算總成本（其他筆不變）
+          bStock.total_cost = bStock.buys.reduce((s,b)=>s+(b.cost||0), 0);
+        }
+      }
+      // 也更新 flat stocks 裡的日期
+      flatRec.date = ch.date;
+      flatRec.total = ch.amount;
+    }
+    saveBundleStocks();
+    if(curPg==='invest') renderInvest();
+  }
+
+  // 如果是「配息」且金額/日期有改，同步更新 BUNDLE.stocks 裡的配息記錄
+  if(oldRec && (ch.cat==='配息' || oldRec.cat==='配息')) {
+    const flatRec = stocks.find(s => String(s.id) === String(id));
+    if(flatRec) {
+      const bStock = (BUNDLE.stocks||[]).find(s => s.code === flatRec.code);
+      if(bStock && bStock.dividends) {
+        const divIdx = bStock.dividends.findIndex(d =>
+          d.date === (oldRec.date || ch.date) &&
+          Math.abs(d.amount - (oldRec.amount || ch.amount)) < 1
+        );
+        if(divIdx >= 0) {
+          bStock.dividends[divIdx] = {date: ch.date, amount: ch.amount};
+          bStock.total_dividend = bStock.dividends.reduce((s,d)=>s+(d.amount||0), 0);
+        }
+      }
+      flatRec.date = ch.date;
+      flatRec.dividend = ch.amount;
+    }
+    saveBundleStocks();
+    if(curPg==='invest') renderInvest();
+  }
+
   closeE();
   if(curPg==='ie') renderIE();
   if(curPg==='dash') renderDash();
