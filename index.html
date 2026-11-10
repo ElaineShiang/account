@@ -4332,16 +4332,60 @@ function editBuyRecord(code, buyIdx) {
   const bStock = (BUNDLE.stocks||[]).find(s => s.code === code);
   if(!bStock || !bStock.buys || !bStock.buys[buyIdx]) return;
   const b = bStock.buys[buyIdx];
-  const newDate = prompt('修改買入日期（格式 YYYY-MM-DD）：', b.date);
-  if(!newDate || newDate === b.date) return;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { toast('⚠️ 日期格式錯誤，請用 YYYY-MM-DD'); return; }
-  bStock.buys[buyIdx] = {...b, date: newDate};
-  // 同步更新 flat stocks
-  const flatRec = stocks.find(s => s.code === code && s.date === b.date && Math.abs((s.total||s.amount||0) - (b.cost||0)) < 1);
-  if(flatRec) { flatRec.date = newDate; updateInGS('stocks', flatRec.id, {date: newDate}); }
+  document.getElementById('beCode').value  = code;
+  document.getElementById('beIdx').value   = buyIdx;
+  document.getElementById('beDate').value  = b.date || '';
+  document.getElementById('bePrice').value = b.price || '';
+  document.getElementById('beShares').value= b.shares || '';
+  const costEl = document.getElementById('beCostShow');
+  if(costEl) costEl.textContent = fmt(b.cost || b.price * b.shares || 0);
+  document.getElementById('buyEditModal').classList.add('on');
+}
+function closeBuyEdit() {
+  document.getElementById('buyEditModal').classList.remove('on');
+}
+function calcBeCost() {
+  const price  = parseFloat(document.getElementById('bePrice').value) || 0;
+  const shares = parseFloat(document.getElementById('beShares').value) || 0;
+  const el = document.getElementById('beCostShow');
+  if(el) el.textContent = fmt(price * shares);
+}
+async function submitBuyEdit() {
+  const code   = document.getElementById('beCode').value;
+  const buyIdx = parseInt(document.getElementById('beIdx').value);
+  const newDate  = document.getElementById('beDate').value;
+  const newPrice = parseFloat(document.getElementById('bePrice').value) || 0;
+  const newShares= parseInt(document.getElementById('beShares').value) || 0;
+  if(!newDate || !newPrice || !newShares) { toast('⚠️ 請填完所有欄位'); return; }
+
+  const bStock = (BUNDLE.stocks||[]).find(s => s.code === code);
+  if(!bStock || !bStock.buys || !bStock.buys[buyIdx]) return;
+  const oldBuy = bStock.buys[buyIdx];
+  const newCost = newPrice * newShares;
+
+  // 更新 BUNDLE.stocks
+  bStock.buys[buyIdx] = {date: newDate, price: newPrice, shares: newShares, amount: newCost, cost: newCost};
+  bStock.total_shares = bStock.buys.reduce((s,b) => s+(b.shares||0), 0);
+  bStock.total_cost   = bStock.buys.reduce((s,b) => s+(b.cost||0), 0);
+
+  // 同步更新 flat stocks + GS
+  const flatRec = stocks.find(s => s.code === code && s.date === oldBuy.date && Math.abs((s.total||0)-(oldBuy.cost||0))<1);
+  if(flatRec) {
+    flatRec.date = newDate; flatRec.price = newPrice; flatRec.shares = newShares; flatRec.total = newCost;
+    await updateInGS('stocks', flatRec.id, {date:newDate, price:newPrice, shares:newShares, total:newCost});
+  }
+  // 同步更新收支記錄
+  const recIdx = records.findIndex(r => r.cat==='投資買入' && r.date===oldBuy.date && Math.abs(r.amount-(oldBuy.cost||0))<1);
+  if(recIdx >= 0) {
+    records[recIdx] = {...records[recIdx], date:newDate, amount:newCost};
+    await updateInGS('records', records[recIdx].id, {date:newDate, amount:newCost});
+  }
+
   saveBundleStocks();
+  closeBuyEdit();
   renderInvest();
-  toast('✅ 日期已更新');
+  if(curPg==='ie') renderIE();
+  toast('✅ 已更新');
 }
 
 function deleteBuyRecord(code, buyIdx) {
@@ -4840,7 +4884,7 @@ function drawPlanDonut(id,cats) {
   if(typeof buildTDF==='function') buildTDF();
 
   // modal 點背景關閉
-  ['qModal','eModal','rModal','tuiEditModal','batchModal','tuiQuickModal','planAssetsModal','planReminderModal'].forEach(id=>{
+  ['qModal','eModal','rModal','tuiEditModal','batchModal','tuiQuickModal','planAssetsModal','planReminderModal','buyEditModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.addEventListener('click',function(ev){if(ev.target===el)el.classList.remove('on');});
   });
@@ -4947,6 +4991,41 @@ function drawPlanDonut(id,cats) {
 </div>
 
 <!-- 財務規劃：季度提醒 Modal -->
+<!-- 投資買入編輯 Modal -->
+<div class="modal-bg" id="buyEditModal">
+  <div class="modal">
+    <div class="modal-ttl">✏️ 編輯買入記錄
+      <button class="modal-x" onclick="closeBuyEdit()">✕</button>
+    </div>
+    <input type="hidden" id="beCode">
+    <input type="hidden" id="beIdx">
+    <div style="display:grid;gap:10px">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">日期</div>
+        <input type="date" id="beDate" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--paper);color:var(--ink);font-size:14px">
+      </div>
+      <div class="fr2">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">每股價格</div>
+          <input type="number" id="bePrice" step="0.01" placeholder="0.00" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--paper);color:var(--ink);font-size:14px" oninput="calcBeCost()">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">股數</div>
+          <input type="number" id="beShares" placeholder="0" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--paper);color:var(--ink);font-size:14px" oninput="calcBeCost()">
+        </div>
+      </div>
+      <div style="background:var(--cream);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--muted)">總成本</div>
+        <div id="beCostShow" style="font-family:DM Mono,monospace;font-size:16px;font-weight:700;color:var(--exp)">—</div>
+      </div>
+    </div>
+    <div class="fr2" style="margin-top:14px">
+      <button class="sbtn sec" onclick="closeBuyEdit()">取消</button>
+      <button class="sbtn" onclick="submitBuyEdit()">儲存</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="planReminderModal">
   <div class="modal">
     <div class="modal-ttl">🔔 財務規劃定期提醒
