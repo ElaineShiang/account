@@ -130,6 +130,11 @@ body{font-family:'Noto Serif TC',serif;background:var(--paper);color:var(--ink);
 /* Modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;align-items:flex-end;justify-content:center}
 .modal-bg.on{display:flex}
+.hist-box{position:absolute;left:0;right:0;top:100%;z-index:50;background:var(--card);border:1px solid var(--border);border-radius:9px;box-shadow:0 6px 18px rgba(0,0,0,.12);margin-top:3px;max-height:220px;overflow-y:auto}
+.hist-it{padding:9px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px}
+.hist-it:last-child{border-bottom:none}
+.hist-it:active,.hist-it:hover{background:var(--cream)}
+.hist-it small{color:var(--muted);font-size:11px;white-space:nowrap;align-self:center}
 .modal{background:var(--card);border-radius:20px 20px 0 0;padding:18px 14px 30px;width:100%;max-height:88vh;overflow-y:auto}
 .modal-ttl{font-family:'Playfair Display',serif;font-size:16px;margin-bottom:13px;display:flex;justify-content:space-between;align-items:center}
 .modal-x{width:28px;height:28px;border-radius:50%;background:var(--cream);border:none;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)}
@@ -383,7 +388,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <option>全盈+PAY</option>
   <option>icash Pay</option>
   <option>全支付</option>
-  <option>台灣行動支付</option>
+  <option>台灣行動支付</option><option>Apple Pay</option>
 </optgroup>
 <optgroup label="其他">
   <option>現金</option>
@@ -678,7 +683,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <option>全盈+PAY</option>
   <option>icash Pay</option>
   <option>全支付</option>
-  <option>台灣行動支付</option>
+  <option>台灣行動支付</option><option>Apple Pay</option>
 </optgroup>
 <optgroup label="其他">
   <option>現金</option>
@@ -732,7 +737,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <option>全盈+PAY</option>
   <option>icash Pay</option>
   <option>全支付</option>
-  <option>台灣行動支付</option>
+  <option>台灣行動支付</option><option>Apple Pay</option>
 </optgroup>
 <optgroup label="其他">
   <option>現金</option>
@@ -810,7 +815,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <div><label class="fl">雜費</label><input class="fi" type="number" id="tuiEditExtra" inputmode="numeric" oninput="calcTuiEdit()"></div>
       <div><label class="fl">付款方式</label>
         <select class="fs" id="tuiEditPay">
-          <option>台灣行動支付</option><option>現金</option>
+          <option>台灣行動支付</option><option>Apple Pay</option><option>現金</option>
           <option>玉山銀行</option><option>中信 Line Pay</option>
         </select>
       </div>
@@ -999,7 +1004,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <div>
         <label class="fl">付款方式</label>
         <select class="fs" id="tqPay">
-          <option>台灣行動支付</option>
+          <option>台灣行動支付</option><option>Apple Pay</option>
           <option>現金</option>
           <option>玉山銀行</option>
           <option>中信 Line Pay</option>
@@ -1053,7 +1058,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <select class="fs" id="batchPay">
           <option value="">— 選擇 —</option>
           <optgroup label="信用卡／簽帳"><option>信用卡</option><option>玉山Wallet</option><option>玉山Unicard</option><option>中信 Line Pay</option></optgroup>
-          <optgroup label="電子支付"><option>Line Pay</option><option>iPASS MONEY</option><option>全盈+PAY</option><option>icash Pay</option><option>全支付</option><option>台灣行動支付</option></optgroup>
+          <optgroup label="電子支付"><option>Line Pay</option><option>iPASS MONEY</option><option>全盈+PAY</option><option>icash Pay</option><option>全支付</option><option>台灣行動支付</option><option>Apple Pay</option></optgroup>
           <optgroup label="其他"><option>現金</option><option>轉帳</option></optgroup>
         </select>
       </div>
@@ -1117,7 +1122,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
         <div>
           <label class="fl">付款方式</label>
           <select class="fs" id="btqPay">
-            <option>台灣行動支付</option>
+            <option>台灣行動支付</option><option>Apple Pay</option>
             <option>現金</option>
             <option>玉山銀行</option>
             <option>中信 Line Pay</option>
@@ -1888,7 +1893,14 @@ function renderAll() {
 
 // ══ 快速記帳 ══
 let qT = 'expense';
-function openQ() { document.getElementById('qModal').classList.add('on'); document.getElementById('qDate').value=today(); setTimeout(()=>document.getElementById('qAmt').focus(),300); }
+function resetQForm(){
+  ['qAmt','qNote','qPayOther'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  ['qCat','qPay'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  const w=document.getElementById('qPayOtherWrap'); if(w) w.style.display='none';
+  if(document.getElementById('qBiz')) document.getElementById('qBiz').checked=false;
+  if(typeof hideHist==='function') hideHist();
+}
+function openQ() { resetQForm(); setQT('expense'); document.getElementById('qModal').classList.add('on'); document.getElementById('qDate').value=today(); setTimeout(()=>document.getElementById('qAmt').focus(),300); }
 function closeQ() { document.getElementById('qModal').classList.remove('on'); }
 function setQT(t) { qT=t; document.getElementById('qE').classList.toggle('on',t==='expense'); document.getElementById('qI').classList.toggle('on',t==='income'); }
 async function submitQ() {
@@ -1906,15 +1918,70 @@ async function submitQ() {
   records.unshift(r);
   if(r.isBiz) markBizLocal(r.id, true);
   setLS('rn', records.filter(x=>x.id>9e6));
-  document.getElementById('qAmt').value='';
-  document.getElementById('qNote').value='';
-  if(document.getElementById('qBiz')) document.getElementById('qBiz').checked=false;
+  resetQForm();
   closeQ();
   if(curPg==='ie') renderIE();
   if(curPg==='dash') renderDash();
   toast(qT==='expense'?'✓ 支出已記錄':'✓ 收入已記錄');
   await pushToGS('records', r);
 }
+
+// ══ 備註歷史自動帶入 ══
+// 打字時找以相同開頭的歷史備註；有「+」時只比對最後一段，點選後只替換那段
+let _histBox=null, _histInput=null;
+function buildNoteHist(){
+  const map=new Map(); // text -> {n:次數, d:最近日期, cat, pay}
+  const add=(t,r)=>{ t=String(t||'').trim(); if(t.length<2||/^\d{4}-\d{2}-\d{2}/.test(t)) return;
+    const o=map.get(t)||{n:0,d:'',cat:'',pay:''}; o.n++;
+    if(String(r.date||'')>=o.d){ o.d=String(r.date||''); if(r.cat) o.cat=r.cat; if(r.payment) o.pay=r.payment; }
+    map.set(t,o); };
+  (records||[]).forEach(r=>{ if(!r||!r.note) return; add(r.note,r);
+    const parts=String(r.note).split('+'); if(parts.length>1) parts.forEach(x=>add(x,{date:r.date})); });
+  return map;
+}
+function hideHist(){ if(_histBox){ _histBox.remove(); _histBox=null; } }
+function showHist(inp, opts){
+  hideHist(); _histInput=inp;
+  const v=inp.value; const cut=v.lastIndexOf('+'); const head=cut>=0?v.slice(0,cut+1):''; const tok=(cut>=0?v.slice(cut+1):v).trim().toLowerCase();
+  if(!tok) return;
+  const list=[...buildNoteHist().entries()]
+    .filter(([t])=>t.toLowerCase().startsWith(tok) && t.toLowerCase()!==tok && (!head || !t.includes('+')))
+    .sort((a,b)=>b[1].d.localeCompare(a[1].d)||b[1].n-a[1].n).slice(0,8);
+  if(!list.length) return;
+  const wrap=inp.parentElement; if(getComputedStyle(wrap).position==='static') wrap.style.position='relative';
+  const box=document.createElement('div'); box.className='hist-box';
+  list.forEach(([t,o])=>{
+    const it=document.createElement('div'); it.className='hist-it';
+    it.innerHTML='<span></span><small></small>'; it.firstChild.textContent=t;
+    it.lastChild.textContent=(o.n>1?o.n+'次':'')+(o.d?' · '+o.d.slice(5):'');
+    const pick=e=>{ e.preventDefault(); inp.value=head+t; hideHist();
+      if(opts&&opts.onPick) opts.onPick(o, !head); inp.focus(); };
+    it.addEventListener('mousedown',pick); it.addEventListener('touchstart',pick,{passive:false});
+    box.appendChild(it);
+  });
+  wrap.appendChild(box); _histBox=box;
+}
+function attachHist(id, opts){
+  const inp=document.getElementById(id); if(!inp||inp._hist) return; inp._hist=true;
+  inp.setAttribute('autocomplete','off');
+  inp.addEventListener('input',()=>showHist(inp,opts));
+  inp.addEventListener('blur',()=>setTimeout(()=>{ if(_histInput===inp) hideHist(); },150));
+  inp.addEventListener('keydown',e=>{ if(e.key==='Escape') hideHist(); });
+}
+// 會觸發同步視窗的類別不自動帶入，留給使用者自己選（才會跳出同步視窗）
+const HIST_SKIP_CAT=['孩子費用','薪資入帳','配息','投資買入','補助款'];
+function histFill(catId, payId){
+  return (o, whole)=>{ if(!whole) return;
+    const c=document.getElementById(catId), p=document.getElementById(payId);
+    if(c && !c.value && o.cat && !HIST_SKIP_CAT.includes(o.cat) && [...c.options].some(x=>x.value===o.cat)) c.value=o.cat;
+    if(p && !p.value && o.pay && [...p.options].some(x=>x.value===o.pay)) p.value=o.pay;
+  };
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  attachHist('qNote',{onPick:histFill('qCat','qPay')});
+  attachHist('eNote');
+});
+if(document.readyState!=='loading'){ attachHist('qNote',{onPick:histFill('qCat','qPay')}); attachHist('eNote'); }
 
 // ══ 編輯 ══
 let eT = 'expense';
