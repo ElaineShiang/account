@@ -135,6 +135,41 @@ body{font-family:'Noto Serif TC',serif;background:var(--paper);color:var(--ink);
 .hist-it:last-child{border-bottom:none}
 .hist-it:active,.hist-it:hover{background:var(--cream)}
 .hist-it small{color:var(--muted);font-size:11px;white-space:nowrap;align-self:center}
+
+:root{--a-inc:#1f8a5c;--a-exp:#c0532a}
+#pg-analysis .ct{font-size:15px;font-weight:700;color:var(--ink);letter-spacing:.5px}
+#pg-analysis .ttl{font-size:22px}
+#pg-analysis .chip{font-size:14px;padding:7px 14px}
+.ak-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.ak{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 10px;text-align:center}
+.ak-l{font-size:13px;color:var(--muted);margin-bottom:4px}
+.ak-v{font-size:clamp(17px,5vw,28px);font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.ak-d{font-size:12px;color:var(--muted);margin-top:4px}
+.ak-d b{font-size:14px}
+.a-leg{display:flex;gap:14px;font-size:13px;margin:2px 0 10px;flex-wrap:wrap}
+.a-leg i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.a-ch{position:relative;height:200px;margin:0 0 0 38px;border-bottom:1px solid var(--border)}
+.a-gl{position:absolute;left:0;right:0;border-top:1px dashed #e6dfcf}
+.a-gl span{position:absolute;left:-40px;top:-8px;width:34px;text-align:right;font-size:11px;color:var(--muted)}
+.a-cols{position:absolute;inset:0;display:flex}
+.a-col{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:2px;cursor:pointer;border-radius:6px 6px 0 0;padding:0 1px}
+.a-col.on{background:rgba(201,168,76,.16)}
+.a-bar{width:min(42%,22px);border-radius:4px 4px 0 0;min-height:0}
+.a-xl{display:flex;margin-left:38px}
+.a-xl div{flex:1;text-align:center;font-size:12px;color:var(--muted);padding-top:5px}
+.a-xl div.on{color:var(--ink);font-weight:700}
+.a-det{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px;background:var(--cream);border-radius:10px;padding:10px}
+.a-det div{text-align:center;font-size:12px;color:var(--muted)}
+.a-det b{display:block;font-size:17px;margin-top:2px;font-variant-numeric:tabular-nums}
+.a-bal{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.a-bal div{border-radius:9px;padding:8px 4px;text-align:center;font-size:12px;color:var(--muted);background:var(--paper);border:1px solid var(--cream)}
+.a-bal b{display:block;font-size:16px;margin-top:2px;font-variant-numeric:tabular-nums}
+.a-cat{display:grid;grid-template-columns:88px 1fr auto;gap:6px 10px;align-items:center;font-size:14px}
+.a-cat .t{height:14px;background:var(--cream);border-radius:7px;overflow:hidden}
+.a-cat .t i{display:block;height:100%;background:var(--a-exp);border-radius:7px}
+.a-cat .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.a-cat .v small{color:var(--muted);font-size:12px;margin-left:5px;display:inline-block;width:34px}
+.a-yv{position:absolute;top:-20px;left:0;right:0;text-align:center;font-size:12px;font-weight:700}
 .modal{background:var(--card);border-radius:20px 20px 0 0;padding:18px 14px 30px;width:100%;max-height:88vh;overflow-y:auto}
 .modal-ttl{font-family:'Playfair Display',serif;font-size:16px;margin-bottom:13px;display:flex;justify-content:space-between;align-items:center}
 .modal-x{width:28px;height:28px;border-radius:50%;background:var(--cream);border:none;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)}
@@ -246,15 +281,21 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 <div class="pg" id="pg-analysis">
   <div class="ttl">收支分析</div>
   <div class="chips" id="aYT"></div>
-  <div class="strip">
-    <div class="sb"><div class="sl">年支出</div><div class="sv exp" id="aE">$0</div></div>
-    <div class="sb"><div class="sl">年收入</div><div class="sv inc" id="aI">$0</div></div>
-    <div class="sb"><div class="sl">儲蓄率</div><div class="sv bal" id="aSR">0%</div></div>
+  <div class="ak-row">
+    <div class="ak"><div class="ak-l">年收入</div><div class="ak-v" style="color:var(--a-inc)" id="aI">$0</div><div class="ak-d" id="aIc"></div></div>
+    <div class="ak"><div class="ak-l">年支出</div><div class="ak-v" style="color:var(--a-exp)" id="aE">$0</div><div class="ak-d" id="aEc"></div></div>
+    <div class="ak"><div class="ak-l">年結餘</div><div class="ak-v" id="aB">$0</div><div class="ak-d">儲蓄率 <b id="aSR">0%</b></div></div>
   </div>
-  <div class="card"><div class="ct">📅 月度收支</div><div id="aMB"></div></div>
-  <div class="card"><div class="ct">📈 月度結餘</div><div id="aBalB"></div></div>
-  <div class="card"><div class="ct">📊 歷年比較</div><div id="aYB"></div></div>
-  <div class="card"><div class="ct">💹 歷年儲蓄率</div><div id="aSRB"></div></div>
+  <div class="card"><div class="ct">📅 每月收支</div>
+    <div class="a-leg"><span><i style="background:var(--a-inc)"></i>收入</span><span><i style="background:var(--a-exp)"></i>支出</span><span style="color:var(--muted)">點月份看明細</span></div>
+    <div id="aMB"></div><div id="aMDet"></div>
+  </div>
+  <div class="card"><div class="ct">💰 每月結餘（收入 - 支出）</div><div id="aBalB"></div></div>
+  <div class="card"><div class="ct">🧾 支出去哪了</div><div id="aCat"></div></div>
+  <div class="card"><div class="ct">📊 歷年比較</div>
+    <div class="a-leg"><span><i style="background:var(--a-inc)"></i>收入</span><span><i style="background:var(--a-exp)"></i>支出</span><span style="color:var(--muted)">上方為儲蓄率</span></div>
+    <div id="aYB"></div>
+  </div>
   <div class="card"><div class="ct">🔍 Top 10 大額支出</div><div id="aTop"></div></div>
   <div class="card">
     <div class="ct">💼 出差費用請款追蹤</div>
@@ -2321,30 +2362,67 @@ function renderDash() {
 // ══ 分析 ══
 let aY=new Date().getFullYear();
 function renderAna(){
-  const yrs=[...new Set(records.map(r=>+r.date.slice(0,4)))].sort((a,b)=>b-a);
+  const yrs=[...new Set(records.filter(r=>r.type==='expense'||r.type==='income').map(r=>+String(r.date).slice(0,4)))].filter(Boolean).sort((a,b)=>b-a);
   if(!yrs.includes(aY)) aY=yrs[0];
   document.getElementById('aYT').innerHTML=yrs.map(y=>`<button class="chip ${y===aY?'on':''}" onclick="setAY(${y})">${y}年</button>`).join('');
-  const yr=records.filter(r=>+r.date.slice(0,4)===aY);
-  const tE=sum(yr,'expense'),tI=sum(yr,'income'),sr=tI>0?(1-tE/tI)*100:0;
+  const W=n=>{const a=Math.abs(Math.round(n));return (n<0?'-':'')+(a>=10000?(a/10000).toFixed(a>=1000000?0:1).replace(/\.0$/,'')+'萬':a.toLocaleString('zh-TW'))};
+  const _pm=bizReimbMap();
+  const mon=y=>{const E=Array(13).fill(0),I=Array(13).fill(0);records.forEach(r=>{if(+String(r.date).slice(0,4)!==y)return;const m=+String(r.date).slice(5,7);if(r.type==='expense')E[m]+=plAmt(r,_pm);else if(r.type==='income')I[m]+=plAmt(r,_pm)});return{E,I}};
+  const cur=mon(aY), prev=mon(aY-1);
+  const now=new Date(), isCurY=aY===now.getFullYear(), upto=isCurY?now.getMonth()+1:12;
+  const s=(arr,to)=>arr.slice(1,to+1).reduce((a,b)=>a+b,0);
+  const tE=s(cur.E,12),tI=s(cur.I,12),tB=tI-tE,sr=tI>0?tB/tI*100:0;
   document.getElementById('aE').textContent=fmt(tE);
   document.getElementById('aI').textContent=fmt(tI);
-  document.getElementById('aSR').textContent=pct(sr);
-  document.getElementById('aSR').style.color=sr>=40?'var(--inc)':'var(--exp)';
-  const ms=Array.from({length:12},(_,i)=>i+1);
-  const mE={},mI={};ms.forEach(m=>{mE[m]=0;mI[m]=0});
-  const _pm=bizReimbMap();yr.forEach(r=>{const m=+r.date.slice(5,7);if(r.type==='expense')mE[m]+=plAmt(r,_pm);else mI[m]+=plAmt(r,_pm)});
-  const maxM=Math.max(...ms.flatMap(m=>[mE[m],mI[m]]),1);
-  document.getElementById('aMB').innerHTML=ms.map(m=>`<div style="margin-bottom:6px"><div style="font-size:9px;color:var(--muted);margin-bottom:2px">${m}月</div>
-    <div style="display:flex;gap:4px;align-items:center;margin-bottom:1px"><div class="btrk"><div class="bE" style="width:${Math.round(mE[m]/maxM*100)}%"></div></div><div class="bval" style="color:var(--exp)">${mE[m]?fmtK(mE[m]):''}</div></div>
-    <div style="display:flex;gap:4px;align-items:center"><div class="btrk"><div class="bI" style="width:${Math.round(mI[m]/maxM*100)}%"></div></div><div class="bval" style="color:var(--inc)">${mI[m]?fmtK(mI[m]):''}</div></div>
-  </div>`).join('');
-  const maxBal=Math.max(...ms.map(m=>Math.abs(mI[m]-mE[m])),1);
-  document.getElementById('aBalB').innerHTML=ms.map(m=>{const bal=mI[m]-mE[m],p=Math.round(Math.abs(bal)/maxBal*100),isP=bal>=0;return`<div class="brow"><div class="blbl">${m}月</div><div class="btrk"><div style="width:${p}%;height:100%;border-radius:6px;background:${isP?'linear-gradient(90deg,var(--inc),#60b080)':'linear-gradient(90deg,var(--exp),#e88060)'}"></div></div><div class="bval" style="color:${isP?'var(--inc)':'var(--exp)'}">${bal?fmtK(bal):''}</div></div>`;}).join('');
-  const allY=[...new Set(records.map(r=>r.date.slice(0,4)))].sort();
-  const yD=allY.map(y=>{const r=records.filter(r=>r.date.startsWith(y));return{y,e:sum(r,'expense'),i:sum(r,'income')}});
-  const mxY=Math.max(...yD.flatMap(d=>[d.e,d.i]),1);
-  document.getElementById('aYB').innerHTML=yD.map(d=>`<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;margin-bottom:3px">${d.y}年</div><div class="brow" style="margin-bottom:2px"><div class="blbl" style="font-size:9px;color:var(--exp)">支出</div><div class="btrk"><div class="bE" style="width:${Math.round(d.e/mxY*100)}%"></div></div><div class="bval">${fmt(d.e)}</div></div><div class="brow"><div class="blbl" style="font-size:9px;color:var(--inc)">收入</div><div class="btrk"><div class="bI" style="width:${Math.round(d.i/mxY*100)}%"></div></div><div class="bval">${fmt(d.i)}</div></div></div>`).join('');
-  document.getElementById('aSRB').innerHTML=yD.map(d=>{const sr2=d.i>0?(1-d.e/d.i)*100:0,p=Math.min(100,Math.max(0,sr2));return`<div class="brow"><div class="blbl">${d.y}</div><div class="btrk"><div style="width:${p}%;height:100%;border-radius:6px;background:${sr2>=40?'linear-gradient(90deg,var(--inc),#60b080)':'linear-gradient(90deg,var(--exp),#e88060)'}"></div></div><div class="bval" style="color:${sr2>=40?'var(--inc)':'var(--exp)'}">${pct(sr2)}</div></div>`;}).join('');
+  const bEl=document.getElementById('aB'); bEl.textContent=(tB<0?'-':'')+fmt(Math.abs(tB)); bEl.style.color=tB>=0?'var(--a-inc)':'var(--a-exp)';
+  const srEl=document.getElementById('aSR'); srEl.textContent=pct(sr); srEl.style.color=sr>=40?'var(--a-inc)':'var(--a-exp)';
+  // 跟去年同期比
+  const cmp=(id,c,p,goodUp)=>{const el=document.getElementById(id);if(!p){el.textContent=isCurY?'去年同期無資料':'去年無資料';return}
+    const d=(c-p)/p*100, up=d>=0, good=up===goodUp;
+    el.innerHTML=`${isCurY?'比去年同期':'比去年'} <b style="color:${good?'var(--a-inc)':'var(--a-exp)'}">${up?'▲':'▼'} ${Math.abs(d).toFixed(0)}%</b>`};
+  cmp('aIc',s(cur.I,upto),s(prev.I,upto),true);
+  cmp('aEc',s(cur.E,upto),s(prev.E,upto),false);
+
+  // 每月收支：直立柱狀圖
+  const ms=[1,2,3,4,5,6,7,8,9,10,11,12];
+  const mx=Math.max(...ms.flatMap(m=>[cur.E[m],cur.I[m]]),1);
+  const step=[5000,10000,20000,30000,50000,100000,200000,500000,1000000].find(v=>mx/v<=4)||Math.ceil(mx/4);
+  const top=Math.ceil(mx/step)*step;
+  let grid='';for(let v=0;v<=top;v+=step){grid+=`<div class="a-gl" style="bottom:${v/top*100}%"><span>${v?W(v):'0'}</span></div>`}
+  if(!window._aSelM||window._aSelY!==aY){ let last=0; ms.forEach(m=>{if(cur.E[m]||cur.I[m])last=m}); window._aSelM=last||1; window._aSelY=aY; }
+  const sel=window._aSelM;
+  document.getElementById('aMB').innerHTML=`<div class="a-ch">${grid}<div class="a-cols">${ms.map(m=>`<div class="a-col ${m===sel?'on':''}" onclick="selAM(${m})" title="${m}月 收入 ${fmt(cur.I[m])}／支出 ${fmt(cur.E[m])}">
+      <div class="a-bar" style="height:${cur.I[m]/top*100}%;background:var(--a-inc)"></div>
+      <div class="a-bar" style="height:${cur.E[m]/top*100}%;background:var(--a-exp)"></div></div>`).join('')}</div></div>
+    <div class="a-xl">${ms.map(m=>`<div class="${m===sel?'on':''}">${m}月</div>`).join('')}</div>`;
+  const bal=cur.I[sel]-cur.E[sel];
+  document.getElementById('aMDet').innerHTML=`<div class="a-det"><div>${sel}月 收入<b style="color:var(--a-inc)">${fmt(cur.I[sel])}</b></div><div>${sel}月 支出<b style="color:var(--a-exp)">${fmt(cur.E[sel])}</b></div><div>${sel}月 結餘<b style="color:${bal>=0?'var(--a-inc)':'var(--a-exp)'}">${bal<0?'-':''}${fmt(Math.abs(bal))}</b></div></div>`;
+
+  // 每月結餘：格子一眼看正負
+  document.getElementById('aBalB').innerHTML=`<div class="a-bal">${ms.map(m=>{const has=cur.E[m]||cur.I[m],b=cur.I[m]-cur.E[m];
+    return `<div style="${has?`background:${b>=0?'#e7f4ed':'#fbeae3'};border-color:transparent`:''}">${m}月<b style="color:${!has?'var(--border)':b>=0?'var(--a-inc)':'var(--a-exp)'}">${has?(b>=0?'+':'')+W(b):'-'}</b></div>`}).join('')}</div>`;
+
+  // 支出去哪了：依類別排序
+  const cm={};records.forEach(r=>{if(r.type!=='expense'||+String(r.date).slice(0,4)!==aY)return;const v=plAmt(r,_pm);if(v>0){const k=r.cat||'未分類';cm[k]=(cm[k]||0)+v}});
+  let cats=Object.entries(cm).sort((a,b)=>b[1]-a[1]);
+  if(cats.length>8){const rest=cats.slice(7).reduce((a,b)=>a+b[1],0);cats=[...cats.slice(0,7),['其他',rest]]}
+  const cmx=cats[0]?cats[0][1]:1;
+  document.getElementById('aCat').innerHTML=cats.length?`<div class="a-cat">${cats.map(([k,v])=>`<div>${k}</div><div class="t"><i style="width:${v/cmx*100}%"></i></div><div class="v">${fmt(v)}<small>${tE?Math.round(v/tE*100):0}%</small></div>`).join('')}</div>`
+    +(cm['未分類']?`<div style="font-size:12px;color:var(--muted);margin-top:10px">「未分類」是當初沒選類別的紀錄，可到收支頁編輯補上</div>`:''):'<div class="empty">今年還沒有支出</div>';
+
+  // 歷年比較：直立柱狀圖 + 儲蓄率
+  const allY=[...yrs].sort((a,b)=>a-b);
+  const yD=allY.map(y=>{const d=mon(y);const e=s(d.E,12),i=s(d.I,12);return{y,e,i,sr:i>0?(i-e)/i*100:0}});
+  const ymx=Math.max(...yD.flatMap(d=>[d.e,d.i]),1);
+  const ystep=[100000,200000,300000,500000,1000000,2000000].find(v=>ymx/v<=4)||Math.ceil(ymx/4);
+  const ytop=Math.ceil(ymx/ystep)*ystep;
+  let yg='';for(let v=0;v<=ytop;v+=ystep){yg+=`<div class="a-gl" style="bottom:${v/ytop*100}%"><span>${v?W(v):'0'}</span></div>`}
+  document.getElementById('aYB').innerHTML=`<div class="a-ch" style="margin-top:24px">${yg}<div class="a-cols">${yD.map(d=>`<div class="a-col ${d.y===aY?'on':''}" style="position:relative" onclick="setAY(${d.y})" title="${d.y}年 收入 ${fmt(d.i)}／支出 ${fmt(d.e)}">
+      <div class="a-yv" style="top:${Math.max(0,100-Math.max(d.i,d.e)/ytop*100)}%;transform:translateY(-100%);color:${d.sr>=40?'var(--a-inc)':'var(--a-exp)'}">${d.i?Math.round(d.sr)+'%':''}</div>
+      <div class="a-bar" style="height:${d.i/ytop*100}%;background:var(--a-inc);width:min(38%,34px)"></div>
+      <div class="a-bar" style="height:${d.e/ytop*100}%;background:var(--a-exp);width:min(38%,34px)"></div></div>`).join('')}</div></div>
+    <div class="a-xl">${yD.map(d=>`<div class="${d.y===aY?'on':''}">${d.y}</div>`).join('')}</div>`;
+
   // 出差費用請款追蹤
   renderBiz();
 
@@ -2352,6 +2430,7 @@ function renderAna(){
   document.getElementById('aTop').innerHTML=topE.map((r,i)=>`<div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--cream)"><div style="font-size:10px;color:var(--muted);width:14px;flex-shrink:0">${i+1}</div><div style="flex:1;min-width:0"><div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.note||'—'}</div><div style="font-size:10px;color:var(--muted)">${r.date}</div></div><div style="font-family:'DM Mono';font-size:12px;color:var(--exp);font-weight:600;flex-shrink:0">${fmt(r.amount)}</div></div>`).join('');
 }
 function setAY(y){aY=y;renderAna()}
+function selAM(m){window._aSelM=m;renderAna()}
 
 
 // ══════════════════════════════════════════
