@@ -280,6 +280,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 <!-- 分析 -->
 <div class="pg" id="pg-analysis">
   <div class="ttl">收支分析</div>
+  <div style="font-size:13px;color:var(--muted);margin:-4px 0 10px">從 2026 年 5 月開始用記帳 app 管理起算，之前的舊資料不列入分析</div>
   <div class="chips" id="aYT"></div>
   <div class="ak-row">
     <div class="ak"><div class="ak-l">年收入</div><div class="ak-v" style="color:var(--a-inc)" id="aI">$0</div><div class="ak-d" id="aIc"></div></div>
@@ -296,7 +297,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <div class="a-leg"><span><i style="background:var(--a-inc)"></i>收入</span><span><i style="background:var(--a-exp)"></i>支出</span><span style="color:var(--muted)">上方為儲蓄率</span></div>
     <div id="aYB"></div>
   </div>
-  <div class="card"><div class="ct">🔍 Top 10 大額支出</div><div id="aTop"></div></div>
+  <div class="card"><div class="ct">🔍 Top 10 大額支出（2026/5 起）</div><div id="aTop"></div></div>
   <div class="card">
     <div class="ct">💼 出差費用請款追蹤</div>
     <div id="bizList"></div>
@@ -2361,13 +2362,17 @@ function renderDash() {
 
 // ══ 分析 ══
 let aY=new Date().getFullYear();
+// 分析起點：開始用 Claude 記帳 app 管理的月份，之前的舊資料不列入分析（要改起點只改這裡）
+const ANA_START='2026-05';
 function renderAna(){
-  const yrs=[...new Set(records.filter(r=>r.type==='expense'||r.type==='income').map(r=>+String(r.date).slice(0,4)))].filter(Boolean).sort((a,b)=>b-a);
+  const anaRecs=records.filter(r=>String(r.date).slice(0,7)>=ANA_START);
+  const yrs=[...new Set(anaRecs.filter(r=>r.type==='expense'||r.type==='income').map(r=>+String(r.date).slice(0,4)))].filter(Boolean).sort((a,b)=>b-a);
   if(!yrs.includes(aY)) aY=yrs[0];
+  document.getElementById('aYT').style.display=yrs.length>1?'':'none';
   document.getElementById('aYT').innerHTML=yrs.map(y=>`<button class="chip ${y===aY?'on':''}" onclick="setAY(${y})">${y}年</button>`).join('');
   const W=n=>{const a=Math.abs(Math.round(n));return (n<0?'-':'')+(a>=10000?(a/10000).toFixed(a>=1000000?0:1).replace(/\.0$/,'')+'萬':a.toLocaleString('zh-TW'))};
   const _pm=bizReimbMap();
-  const mon=y=>{const E=Array(13).fill(0),I=Array(13).fill(0);records.forEach(r=>{if(+String(r.date).slice(0,4)!==y)return;const m=+String(r.date).slice(5,7);if(r.type==='expense')E[m]+=plAmt(r,_pm);else if(r.type==='income')I[m]+=plAmt(r,_pm)});return{E,I}};
+  const mon=y=>{const E=Array(13).fill(0),I=Array(13).fill(0);anaRecs.forEach(r=>{if(+String(r.date).slice(0,4)!==y)return;const m=+String(r.date).slice(5,7);if(r.type==='expense')E[m]+=plAmt(r,_pm);else if(r.type==='income')I[m]+=plAmt(r,_pm)});return{E,I}};
   const cur=mon(aY), prev=mon(aY-1);
   const now=new Date(), isCurY=aY===now.getFullYear(), upto=isCurY?now.getMonth()+1:12;
   const s=(arr,to)=>arr.slice(1,to+1).reduce((a,b)=>a+b,0);
@@ -2377,14 +2382,17 @@ function renderAna(){
   const bEl=document.getElementById('aB'); bEl.textContent=(tB<0?'-':'')+fmt(Math.abs(tB)); bEl.style.color=tB>=0?'var(--a-inc)':'var(--a-exp)';
   const srEl=document.getElementById('aSR'); srEl.textContent=pct(sr); srEl.style.color=sr>=40?'var(--a-inc)':'var(--a-exp)';
   // 跟去年同期比
-  const cmp=(id,c,p,goodUp)=>{const el=document.getElementById(id);if(!p){el.textContent=isCurY?'去年同期無資料':'去年無資料';return}
+  const cmp=(id,c,p,goodUp)=>{const el=document.getElementById(id);if(!p){const n=(isCurY?now.getMonth()+1:12)-(aY===+ANA_START.slice(0,4)?+ANA_START.slice(5,7):1)+1;el.innerHTML=`月平均 <b>${fmt(Math.round(c/Math.max(1,n)))}</b>`;return}
     const d=(c-p)/p*100, up=d>=0, good=up===goodUp;
     el.innerHTML=`${isCurY?'比去年同期':'比去年'} <b style="color:${good?'var(--a-inc)':'var(--a-exp)'}">${up?'▲':'▼'} ${Math.abs(d).toFixed(0)}%</b>`};
   cmp('aIc',s(cur.I,upto),s(prev.I,upto),true);
   cmp('aEc',s(cur.E,upto),s(prev.E,upto),false);
 
   // 每月收支：直立柱狀圖
-  const ms=[1,2,3,4,5,6,7,8,9,10,11,12];
+  const sY=+ANA_START.slice(0,4), sM=+ANA_START.slice(5,7);
+  const m0=aY===sY?sM:1, m1=isCurY?now.getMonth()+1:12;
+  const ms=[];for(let m=m0;m<=m1;m++)ms.push(m);
+  const nM=ms.length;
   const mx=Math.max(...ms.flatMap(m=>[cur.E[m],cur.I[m]]),1);
   const step=[5000,10000,20000,30000,50000,100000,200000,500000,1000000].find(v=>mx/v<=4)||Math.ceil(mx/4);
   const top=Math.ceil(mx/step)*step;
@@ -2399,11 +2407,11 @@ function renderAna(){
   document.getElementById('aMDet').innerHTML=`<div class="a-det"><div>${sel}月 收入<b style="color:var(--a-inc)">${fmt(cur.I[sel])}</b></div><div>${sel}月 支出<b style="color:var(--a-exp)">${fmt(cur.E[sel])}</b></div><div>${sel}月 結餘<b style="color:${bal>=0?'var(--a-inc)':'var(--a-exp)'}">${bal<0?'-':''}${fmt(Math.abs(bal))}</b></div></div>`;
 
   // 每月結餘：格子一眼看正負
-  document.getElementById('aBalB').innerHTML=`<div class="a-bal">${ms.map(m=>{const has=cur.E[m]||cur.I[m],b=cur.I[m]-cur.E[m];
+  document.getElementById('aBalB').innerHTML=`<div class="a-bal" style="grid-template-columns:repeat(${Math.min(4,nM)},1fr)">${ms.map(m=>{const has=cur.E[m]||cur.I[m],b=cur.I[m]-cur.E[m];
     return `<div style="${has?`background:${b>=0?'#e7f4ed':'#fbeae3'};border-color:transparent`:''}">${m}月<b style="color:${!has?'var(--border)':b>=0?'var(--a-inc)':'var(--a-exp)'}">${has?(b>=0?'+':'')+W(b):'-'}</b></div>`}).join('')}</div>`;
 
   // 支出去哪了：依類別排序
-  const cm={};records.forEach(r=>{if(r.type!=='expense'||+String(r.date).slice(0,4)!==aY)return;const v=plAmt(r,_pm);if(v>0){const k=r.cat||'未分類';cm[k]=(cm[k]||0)+v}});
+  const cm={};anaRecs.forEach(r=>{if(r.type!=='expense'||+String(r.date).slice(0,4)!==aY)return;const v=plAmt(r,_pm);if(v>0){const k=r.cat||'未分類';cm[k]=(cm[k]||0)+v}});
   let cats=Object.entries(cm).sort((a,b)=>b[1]-a[1]);
   if(cats.length>8){const rest=cats.slice(7).reduce((a,b)=>a+b[1],0);cats=[...cats.slice(0,7),['其他',rest]]}
   const cmx=cats[0]?cats[0][1]:1;
@@ -2412,6 +2420,7 @@ function renderAna(){
 
   // 歷年比較：直立柱狀圖 + 儲蓄率
   const allY=[...yrs].sort((a,b)=>a-b);
+  const yCard=document.getElementById('aYB').closest('.card'); if(yCard) yCard.style.display=allY.length>1?'':'none';
   const yD=allY.map(y=>{const d=mon(y);const e=s(d.E,12),i=s(d.I,12);return{y,e,i,sr:i>0?(i-e)/i*100:0}});
   const ymx=Math.max(...yD.flatMap(d=>[d.e,d.i]),1);
   const ystep=[100000,200000,300000,500000,1000000,2000000].find(v=>ymx/v<=4)||Math.ceil(ymx/4);
@@ -2426,7 +2435,7 @@ function renderAna(){
   // 出差費用請款追蹤
   renderBiz();
 
-  const topE=[...records].filter(r=>r.type==='expense'&&plAmt(r)>0).sort((a,b)=>b.amount-a.amount).slice(0,10);
+  const topE=[...anaRecs].filter(r=>r.type==='expense'&&plAmt(r)>0).sort((a,b)=>b.amount-a.amount).slice(0,10);
   document.getElementById('aTop').innerHTML=topE.map((r,i)=>`<div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--cream)"><div style="font-size:10px;color:var(--muted);width:14px;flex-shrink:0">${i+1}</div><div style="flex:1;min-width:0"><div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.note||'—'}</div><div style="font-size:10px;color:var(--muted)">${r.date}</div></div><div style="font-family:'DM Mono';font-size:12px;color:var(--exp);font-weight:600;flex-shrink:0">${fmt(r.amount)}</div></div>`).join('');
 }
 function setAY(y){aY=y;renderAna()}
